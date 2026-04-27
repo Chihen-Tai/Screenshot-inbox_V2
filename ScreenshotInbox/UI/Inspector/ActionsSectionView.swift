@@ -1,0 +1,82 @@
+import SwiftUI
+
+struct ActionsSectionView: View {
+    let screenshot: Screenshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Actions")
+            VStack(spacing: 0) {
+                ActionRow(title: "Open",                 systemImage: "arrow.up.right.square") {}
+                rowDivider
+                ActionRow(title: "Copy Image",           systemImage: "doc.on.doc") {}
+                rowDivider
+                ActionRow(title: "Reveal in Finder",     systemImage: "magnifyingglass") {}
+                rowDivider
+                ActionRow(title: "Add Tag",              systemImage: "tag") {}
+                rowDivider
+                ActionRow(title: "Move to Collection",   systemImage: "folder") {}
+                rowDivider
+                ActionRow(title: "Toggle Favorite",
+                          systemImage: screenshot.isFavorite ? "star.fill" : "star") {}
+                rowDivider
+                ActionRow(title: "Move to Trash",
+                          systemImage: "trash",
+                          isDestructive: true) {}
+            }
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous)
+                    .fill(Theme.SemanticColor.quietFill.opacity(0.35))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+        }
+    }
+
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(Theme.SemanticColor.divider.opacity(0.35))
+            .frame(height: 0.5)
+            .padding(.leading, 36)
+    }
+}
+
+private struct ActionRow: View {
+    let title: String
+    let systemImage: String
+    var isDestructive: Bool = false
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 11) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12))
+                    .frame(width: 18)
+                    .foregroundStyle(iconColor)
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(textColor)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(
+                isHovering
+                    ? Theme.SemanticColor.label.opacity(0.05)
+                    : Color.clear
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+    }
+
+    private var iconColor: Color {
+        isDestructive ? Color.red.opacity(0.65) : Theme.SemanticColor.secondaryLabel
+    }
+    private var textColor: Color {
+        isDestructive ? Color.red.opacity(0.78) : Theme.SemanticColor.label
+    }
+}
