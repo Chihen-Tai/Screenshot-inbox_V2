@@ -1,6 +1,170 @@
 import AppKit
 
-/// Right-click menu for grid items: Open, Reveal in Finder, Tag, Move, Trash.
+/// Phase 5: builds the right-click `NSMenu` for grid items and empty grid
+/// background. The single dispatch point for what each menu does is
+/// `ScreenshotActionRouter`; this controller is purely a menu factory plus a
+/// thin `@objc` invoker so AppKit can target it.
+///
+/// Selection-sync rule (mirrors Finder) is delegated to the router via
+/// `syncSelectionForContextMenu(rightClickedID:)` — call it BEFORE asking for
+/// the item menu so the menu's targets reflect the post-sync selection.
+@MainActor
 final class ContextMenuController {
-    // TODO: build NSMenu dynamically based on selection.
+    private unowned let appState: AppState
+    private unowned let router: ScreenshotActionRouter
+    private let invoker: MenuActionInvoker
+
+    init(appState: AppState, router: ScreenshotActionRouter) {
+        self.appState = appState
+        self.router = router
+        self.invoker = MenuActionInvoker(router: router, appState: appState)
+    }
+
+    // MARK: - Item menu
+
+    /// Right-click on a grid item. The caller must have already invoked
+    /// `router.syncSelectionForContextMenu(rightClickedID:)`; this menu
+    /// operates on `appState.selectedScreenshots` as it stands.
+    func itemMenu() -> NSMenu {
+        let targets = appState.selectedScreenshots
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let n = targets.count
+
+        add(menu, title: "Open",                              key: .open)
+        add(menu, title: "Quick Look",                        key: .quickLook,
+            keyEquivalent: " ", modifiers: [])
+        add(menu, title: "Reveal in Finder",                  key: .revealInFinder)
+        if n == 1 {
+            add(menu, title: "Rename",                        key: .rename,
+                keyEquivalent: "\r", modifiers: [])
+        }
+        menu.addItem(.separator())
+
+        add(menu, title: n > 1 ? "Add Tag to \(n) Screenshots" : "Add Tag",
+            key: .addTag)
+        add(menu, title: n > 1 ? "Move \(n) Screenshots to Collection" : "Move to Collection",
+            key: .moveToCollection)
+        menu.addItem(.separator())
+
+        add(menu, title: n > 1 ? "Copy \(n) Images" : "Copy Image",
+            key: .copyImage)
+        add(menu, title: n > 1 ? "Copy OCR Text from \(n) Screenshots" : "Copy OCR Text",
+            key: .copyOCRText)
+        if n > 1 {
+            add(menu, title: "Merge \(n) Screenshots into PDF", key: .mergeIntoPDF)
+        }
+        menu.addItem(.separator())
+
+        add(menu,
+            title: n > 1 ? "Move \(n) Screenshots to Trash" : "Move to Trash",
+            key: .moveToTrash,
+            keyEquivalent: "\u{8}", modifiers: [])
+
+        return menu
+    }
+
+    // MARK: - Empty-area menu
+
+    /// Right-click on grid background.
+    func emptyAreaMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        add(menu, title: "Import Screenshots…", key: .importScreenshots)
+        add(menu, title: "New Collection",      key: .newCollection)
+        menu.addItem(.separator())
+        add(menu, title: "Select All",          key: .selectAll,
+            keyEquivalent: "a", modifiers: .command)
+        if !appState.selection.isEmpty {
+            add(menu, title: "Clear Selection", key: .clearSelection,
+                keyEquivalent: "\u{1b}", modifiers: [])
+        }
+        return menu
+    }
+
+    // MARK: - Builder helper
+
+    private func add(_ menu: NSMenu,
+                     title: String,
+                     key: MenuActionKey,
+                     keyEquivalent: String = "",
+                     modifiers: NSEvent.ModifierFlags = []) {
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(MenuActionInvoker.invoke(_:)),
+            keyEquivalent: keyEquivalent
+        )
+        item.keyEquivalentModifierMask = modifiers
+        item.target = invoker
+        item.representedObject = key.rawValue
+        item.isEnabled = true
+        menu.addItem(item)
+    }
+}
+
+// MARK: - Action keys
+
+/// String-keyed identifiers stored in each `NSMenuItem.representedObject`.
+/// `String` is required because `representedObject` must be `Any` and survive
+/// the AppKit boundary; raw enums conform via `RawRepresentable`.
+private enum MenuActionKey: String {
+    case open
+    case quickLook
+    case revealInFinder
+    case rename
+    case addTag
+    case moveToCollection
+    case copyImage
+    case copyOCRText
+    case mergeIntoPDF
+    case moveToTrash
+    case importScreenshots
+    case newCollection
+    case selectAll
+    case clearSelection
+}
+
+// MARK: - Invoker
+
+/// `NSObject` subclass so AppKit menu items can target it via `#selector`.
+/// All menu items funnel through `invoke(_:)`, then dispatch to the router on
+/// the main actor against the current selection snapshot.
+@MainActor
+private final class MenuActionInvoker: NSObject {
+    private unowned let router: ScreenshotActionRouter
+    private unowned let appState: AppState
+
+    init(router: ScreenshotActionRouter, appState: AppState) {
+        self.router = router
+        self.appState = appState
+    }
+
+    @objc func invoke(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let key = MenuActionKey(rawValue: raw) else {
+            print("[ContextMenu] invoke: unknown representedObject")
+            return
+        }
+        let targets = appState.selectedScreenshots
+        print("[ContextMenu] invoke key=\(key.rawValue) targets=\(targets.count)")
+
+        switch key {
+        case .open:              router.open(targets)
+        case .quickLook:         router.quickLook(targets)
+        case .revealInFinder:    router.revealInFinder(targets)
+        case .rename:
+            if let one = targets.first { router.rename(one) }
+        case .addTag:            router.addTag(targets)
+        case .moveToCollection:  router.moveToCollection(targets)
+        case .copyImage:         router.copyImage(targets)
+        case .copyOCRText:       router.copyOCRText(targets)
+        case .mergeIntoPDF:      router.mergeIntoPDF(targets)
+        case .moveToTrash:       router.moveToTrash(targets)
+        case .importScreenshots: router.importScreenshots()
+        case .newCollection:     router.newCollection()
+        case .selectAll:         router.selectAll()
+        case .clearSelection:    router.clearSelection()
+        }
+    }
 }

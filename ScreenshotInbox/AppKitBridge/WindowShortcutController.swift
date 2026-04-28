@@ -16,6 +16,12 @@ import AppKit
 final class WindowShortcutController {
     var onSelectAll: (() -> Void)?
     var onClearSelection: (() -> Void)?
+    /// Phase 5 — Delete / Forward-Delete (keyCodes 51 / 117). Mock trash.
+    var onTrash: (() -> Void)?
+    /// Phase 5 — Space (keyCode 49). Toggles preview overlay.
+    var onPreview: (() -> Void)?
+    /// Phase 5 — Return / Enter (keyCode 36). Opens rename sheet.
+    var onRename: (() -> Void)?
 
     private var monitor: Any?
     private var windowProvider: (() -> NSWindow?)?
@@ -84,6 +90,31 @@ final class WindowShortcutController {
         if event.keyCode == 53 || key == "\u{1b}" {
             print("[Shortcut] Escape detected, calling onClearSelection")
             onClearSelection?()
+            return nil
+        }
+
+        // Phase 5 single-key shortcuts. Only fire on bare keys (no modifiers)
+        // so they don't fight Cmd-Delete / Shift-Space etc.
+        let isPlainKey = flags.isEmpty || flags == .function
+
+        // Delete / Forward-Delete → mock trash.
+        if isPlainKey, event.keyCode == 51 || event.keyCode == 117 {
+            print("[Shortcut] Delete detected, calling onTrash")
+            onTrash?()
+            return nil
+        }
+
+        // Space → toggle preview.
+        if isPlainKey, event.keyCode == 49 {
+            print("[Shortcut] Space detected, calling onPreview")
+            onPreview?()
+            return nil
+        }
+
+        // Return / Enter → rename.
+        if isPlainKey, event.keyCode == 36 {
+            print("[Shortcut] Return detected, calling onRename")
+            onRename?()
             return nil
         }
 

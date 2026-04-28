@@ -1,28 +1,58 @@
 import SwiftUI
 
 struct ActionsSectionView: View {
+    @EnvironmentObject private var appState: AppState
     let screenshot: Screenshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Actions")
             VStack(spacing: 0) {
-                ActionRow(title: "Open",                 systemImage: "arrow.up.right.square") {}
+                ActionRow(title: "Open",
+                          systemImage: "arrow.up.right.square") {
+                    appState.router.open([screenshot])
+                }
                 rowDivider
-                ActionRow(title: "Copy Image",           systemImage: "doc.on.doc") {}
+                ActionRow(title: "Quick Look",
+                          systemImage: "eye") {
+                    appState.router.quickLook([screenshot])
+                }
                 rowDivider
-                ActionRow(title: "Reveal in Finder",     systemImage: "magnifyingglass") {}
+                ActionRow(title: "Copy Image",
+                          systemImage: "doc.on.doc") {
+                    appState.router.copyImage([screenshot])
+                }
                 rowDivider
-                ActionRow(title: "Add Tag",              systemImage: "tag") {}
+                ActionRow(title: "Copy OCR Text",
+                          systemImage: "text.viewfinder") {
+                    appState.router.copyOCRText([screenshot])
+                }
                 rowDivider
-                ActionRow(title: "Move to Collection",   systemImage: "folder") {}
+                ActionRow(title: "Reveal in Finder",
+                          systemImage: "magnifyingglass") {
+                    appState.router.revealInFinder([screenshot])
+                }
                 rowDivider
-                ActionRow(title: "Toggle Favorite",
-                          systemImage: screenshot.isFavorite ? "star.fill" : "star") {}
+                ActionRow(title: "Rename",
+                          systemImage: "pencil") {
+                    appState.router.rename(screenshot)
+                }
+                rowDivider
+                ActionRow(title: "Add Tag",
+                          systemImage: "tag") {
+                    appState.router.addTag([screenshot])
+                }
+                rowDivider
+                ActionRow(title: "Move to Collection",
+                          systemImage: "folder") {
+                    appState.router.moveToCollection([screenshot])
+                }
                 rowDivider
                 ActionRow(title: "Move to Trash",
                           systemImage: "trash",
-                          isDestructive: true) {}
+                          isDestructive: true) {
+                    appState.router.moveToTrash([screenshot])
+                }
             }
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous)

@@ -26,6 +26,12 @@ final class ScreenshotCollectionViewController: NSViewController {
     var onSelectAll: (() -> Void)?
     /// Escape — fired by AppKit's `cancelOperation(_:)`.
     var onClear: (() -> Void)?
+    /// Phase 5 — right-click on a grid item. The container runs the
+    /// Finder-style selection-sync rule (replace if not selected) before
+    /// returning the menu so the menu's targets are correct.
+    var onItemMenu: ((UUID) -> NSMenu?)?
+    /// Phase 5 — right-click on grid background (no item under the cursor).
+    var onEmptyAreaMenu: (() -> NSMenu?)?
 
     private let layout = ScreenshotCollectionViewLayout()
     private var currentLayoutMode: Theme.LayoutMode = .regular
@@ -71,6 +77,15 @@ final class ScreenshotCollectionViewController: NSViewController {
         cv.onBackgroundClick = { [weak self] in self?.onBackgroundClick?() }
         cv.onSelectAllShortcut = { [weak self] in self?.onSelectAll?() }
         cv.onClearShortcut = { [weak self] in self?.onClear?() }
+        cv.onMenuForLocation = { [weak self] localPoint in
+            guard let self else { return nil }
+            if let path = cv.indexPathForItem(at: localPoint),
+               path.item < self.screenshots.count {
+                let id = self.screenshots[path.item].id
+                return self.onItemMenu?(id)
+            }
+            return self.onEmptyAreaMenu?()
+        }
         cv.register(
             ScreenshotCollectionViewItem.self,
             forItemWithIdentifier: ScreenshotCollectionViewItem.identifier
@@ -214,6 +229,10 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     var onBackgroundClick: (() -> Void)?
     var onSelectAllShortcut: (() -> Void)?
     var onClearShortcut: (() -> Void)?
+    /// Phase 5 — invoked from `menu(for event:)`. Receives the click location
+    /// in this view's coordinate space and returns the menu to display, or
+    /// `nil` to suppress the menu entirely.
+    var onMenuForLocation: ((NSPoint) -> NSMenu?)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -231,6 +250,16 @@ final class ScreenshotGridCollectionView: NSCollectionView {
             onBackgroundClick?()
         }
         super.mouseDown(with: event)
+    }
+
+    /// Phase 5 — right-click. Take focus, hit-test the location to figure out
+    /// whether the click landed on an item, and ask the controller's
+    /// `onMenuForLocation` callback to build the correct menu. Returning `nil`
+    /// suppresses the menu, which is what we want when no callback is wired.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        window?.makeFirstResponder(self)
+        let local = convert(event.locationInWindow, from: nil)
+        return onMenuForLocation?(local)
     }
 
     /// Standard Cmd-A path. Edit > Select All sends this action up the

@@ -52,8 +52,52 @@ struct MainWindowView: View {
                     NSApp.sendAction(#selector(NSResponder.cancelOperation(_:)), to: nil, from: nil)
                     return
                 }
-                appState.clearScreenshotSelection()
+                // Phase 5: overlay-aware Escape (closes preview/rename first).
+                appState.handleEscape()
             }
+            // Phase 5 — Quick Look preview sheet.
+            .sheet(item: previewBinding) { shot in
+                ImagePreviewView(screenshot: shot) {
+                    appState.previewedScreenshotID = nil
+                }
+            }
+            // Phase 5 — Rename sheet.
+            .sheet(item: renameBinding) { shot in
+                RenameSheet(originalName: shot.name)
+                    .environmentObject(appState)
+            }
+            // Phase 5 — bottom-trailing transient banner.
+            .overlay(alignment: .bottomTrailing) {
+                if let toast = appState.toast {
+                    ToastView(message: toast)
+                        .padding(.trailing, 18)
+                        .padding(.bottom, 18)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .id(toast.id)
+                }
+            }
+            .animation(.easeOut(duration: 0.18), value: appState.toast?.id)
+    }
+
+    /// `.sheet(item:)` needs an `Identifiable` binding. `Screenshot` already
+    /// is, so we adapt `previewedScreenshotID` into a binding that yields the
+    /// resolved screenshot — and on dismiss, clears the underlying ID.
+    private var previewBinding: Binding<Screenshot?> {
+        Binding(
+            get: { appState.previewedScreenshot },
+            set: { newValue in
+                if newValue == nil { appState.previewedScreenshotID = nil }
+            }
+        )
+    }
+
+    private var renameBinding: Binding<Screenshot?> {
+        Binding(
+            get: { appState.renamingScreenshot },
+            set: { newValue in
+                if newValue == nil { appState.cancelRename() }
+            }
+        )
     }
 
     private var itemCountText: String {

@@ -3,13 +3,19 @@ import AppKit
 
 /// SwiftUI host for the AppKit grid.
 ///
-/// Phase 4 wiring:
+/// Phase 5 wiring:
 /// - Click → SelectionController (replace / toggle / extendRange).
 /// - Background click → clear.
-/// - Window-scoped keyboard monitor for Cmd-A and Escape.
+/// - Window-scoped keyboard monitor for Cmd-A / Escape / Delete / Space / Enter.
+/// - Right-click → builds `NSMenu` via `ContextMenuController`, with
+///   Finder-style selection-sync delegated to the router.
 /// - Filter-chip / sidebar changes prune selection so counts stay honest.
 struct ScreenshotGridContainer: View {
     @EnvironmentObject private var appState: AppState
+
+    /// Lazily constructed once `appState` is available. The router is owned
+    /// by `AppState`; the menu controller just needs unowned refs to both.
+    @State private var menuController: ContextMenuController?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +38,13 @@ struct ScreenshotGridContainer: View {
                 onClear: {
                     print("[GridContainer] clearSelection received; instance=\(ObjectIdentifier(appState))")
                     appState.clearScreenshotSelection()
+                },
+                onItemMenu: { id in
+                    appState.router.syncSelectionForContextMenu(rightClickedID: id)
+                    return ensureMenuController().itemMenu()
+                },
+                onEmptyAreaMenu: {
+                    ensureMenuController().emptyAreaMenu()
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -59,6 +72,13 @@ struct ScreenshotGridContainer: View {
         .onChange(of: appState.sidebarSelection) { appState.pruneSelectionToVisible() }
     }
 
+    private func ensureMenuController() -> ContextMenuController {
+        if let existing = menuController { return existing }
+        let made = ContextMenuController(appState: appState, router: appState.router)
+        menuController = made
+        return made
+    }
+
     /// SwiftUI consumes Cmd-A and Escape inside its own focus system before
     /// AppKit ever sees the keyDown — overrides on `NSCollectionView` and a
     /// window-level `NSEvent` monitor both got starved. Binding shortcuts on
@@ -80,7 +100,8 @@ struct ScreenshotGridContainer: View {
             NSApp.sendAction(#selector(NSResponder.cancelOperation(_:)), to: nil, from: nil)
             return
         }
-        appState.clearScreenshotSelection()
+        // Phase 5: overlay-first, then selection. Single source of truth on AppState.
+        appState.handleEscape()
     }
 
     private func handleClick(_ id: UUID, _ mods: NSEvent.ModifierFlags) {
@@ -113,4 +134,3 @@ struct ScreenshotGridContainer: View {
         return "\(totalText) — \(sel) selected"
     }
 }
-

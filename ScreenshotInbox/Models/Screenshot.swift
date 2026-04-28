@@ -19,9 +19,37 @@ struct Screenshot: Identifiable, Hashable {
     var isFavorite: Bool
     var isOCRComplete: Bool
     var thumbnailKind: ThumbnailKind
-    /// Phase 5 mock trash. `true` hides the screenshot from normal views and
-    /// surfaces it under the Trash sidebar item. No real file ops yet.
+    /// `true` hides the screenshot from normal views and surfaces it under
+    /// the Trash sidebar item.
     var isTrashed: Bool = false
+
+    // MARK: - Phase 6 persistence fields
+    //
+    // Defaults are `nil` so the Phase 5 mock memberwise-init call sites in
+    // `Screenshot.mocks` keep compiling unchanged. Real rows loaded from
+    // SQLite always populate these.
+
+    /// Path relative to the library root (e.g. `Originals/2026/04/<uuid>.png`).
+    /// `nil` for mock data only.
+    var libraryPath: String? = nil
+    /// 64-char lowercase hex SHA-256 of the original file at import time.
+    /// `nil` for mock data only.
+    var fileHash: String? = nil
+    /// Time the file entered the library. `nil` for mock data only.
+    var importedAt: Date? = nil
+    /// Last time the row was mutated (rename, trash, untrash, …).
+    var modifiedAt: Date? = nil
+    /// Bundle identifier or human name of the originating app, when known.
+    var sourceApp: String? = nil
+    /// Optional explicit ordering hint.
+    var sortIndex: Int? = nil
+    /// Time the row was moved to trash. `nil` when not trashed.
+    var trashDate: Date? = nil
+}
+
+extension Screenshot {
+    /// Canonical UUID string for joining with library file paths.
+    var uuidString: String { id.uuidString.lowercased() }
 }
 
 extension Screenshot {

@@ -191,17 +191,31 @@ private struct CommonTagsSection: View {
 }
 
 private struct MultiActionsSection: View {
+    @EnvironmentObject private var appState: AppState
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Actions")
             VStack(spacing: 0) {
-                row(title: "Merge PDF",          systemImage: "doc.on.doc")
+                row(title: "Merge PDF", systemImage: "doc.on.doc") {
+                    appState.router.mergeIntoPDF(appState.selectedScreenshots)
+                }
                 rowDivider
-                row(title: "Add Tag",            systemImage: "tag")
+                row(title: "Copy OCR Text", systemImage: "text.viewfinder") {
+                    appState.router.copyOCRText(appState.selectedScreenshots)
+                }
                 rowDivider
-                row(title: "Move to Collection", systemImage: "folder")
+                row(title: "Add Tag", systemImage: "tag") {
+                    appState.router.addTag(appState.selectedScreenshots)
+                }
                 rowDivider
-                row(title: "Move to Trash",      systemImage: "trash", isDestructive: true)
+                row(title: "Move to Collection", systemImage: "folder") {
+                    appState.router.moveToCollection(appState.selectedScreenshots)
+                }
+                rowDivider
+                row(title: "Move to Trash", systemImage: "trash", isDestructive: true) {
+                    appState.router.moveToTrash(appState.selectedScreenshots)
+                }
             }
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous)
@@ -211,9 +225,11 @@ private struct MultiActionsSection: View {
         }
     }
 
-    private func row(title: String, systemImage: String, isDestructive: Bool = false) -> some View {
-        // Phase 4: visuals only — the underlying actions arrive in later phases.
-        Button(action: {}) {
+    private func row(title: String,
+                     systemImage: String,
+                     isDestructive: Bool = false,
+                     action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 11) {
                 Image(systemName: systemImage)
                     .font(.system(size: 12))

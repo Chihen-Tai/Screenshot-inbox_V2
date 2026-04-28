@@ -22,14 +22,18 @@ struct BatchActionBarView: View {
                 Spacer(minLength: 8)
 
                 BatchButton(title: isCompact ? "Tag" : "Add Tag",
-                            systemImage: "tag", action: {})
+                            systemImage: "tag",
+                            action: { appState.router.addTag(appState.selectedScreenshots) })
                 BatchButton(title: "Move",
-                            systemImage: "folder", action: {})
+                            systemImage: "folder",
+                            action: { appState.router.moveToCollection(appState.selectedScreenshots) })
                 BatchButton(title: isCompact ? "PDF" : "Merge PDF",
-                            systemImage: "doc.on.doc", action: {})
+                            systemImage: "doc.on.doc",
+                            action: { appState.router.mergeIntoPDF(appState.selectedScreenshots) })
                 BatchButton(title: "Trash",
                             systemImage: "trash",
-                            style: .destructive, action: {})
+                            style: .destructive,
+                            action: { appState.router.moveToTrash(appState.selectedScreenshots) })
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
