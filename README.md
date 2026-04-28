@@ -45,7 +45,7 @@ Built for users who take a large number of screenshots and need a faster way to 
 ### Clone the repository
 
 ```bash
-git clone https://github.com/your-username/screenshot-inbox.git
+git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
 cd screenshot-inbox
 ```
 
@@ -155,7 +155,7 @@ Screenshot Inbox 是一個輕量級 macOS 工具，用來快速整理、重新�
 ### 下載專案
 
 ```bash
-git clone https://github.com/your-username/screenshot-inbox.git
+git clone hhttps://github.com/Chihen-Tai/Screenshot-inbox_V2.git
 cd screenshot-inbox
 ```
 
