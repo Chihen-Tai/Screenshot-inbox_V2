@@ -1,7 +1,10 @@
 import Foundation
 
 struct Tag: Identifiable, Hashable {
-    let id: UUID
+    var id: Int?
+    var uuid: String
     var name: String
-    // TODO: color, usageCount.
+    var color: String?
+    var createdAt: Date
+    var updatedAt: Date?
 }

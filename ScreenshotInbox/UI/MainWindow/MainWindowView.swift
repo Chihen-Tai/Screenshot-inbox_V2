@@ -18,7 +18,8 @@ struct MainWindowView: View {
                     searchQuery: $appState.searchQuery,
                     mode: appState.layoutMode,
                     sidebarVisible: $appState.sidebarOverrideVisible,
-                    inspectorVisible: $appState.inspectorOverrideVisible
+                    inspectorVisible: $appState.inspectorOverrideVisible,
+                    onImport: presentImportPanel
                 )
             }
             .frame(
@@ -57,13 +58,24 @@ struct MainWindowView: View {
             }
             // Phase 5 — Quick Look preview sheet.
             .sheet(item: previewBinding) { shot in
-                ImagePreviewView(screenshot: shot) {
+                ImagePreviewView(
+                    screenshot: shot,
+                    thumbnailProvider: appState.thumbnailProvider
+                ) {
                     appState.previewedScreenshotID = nil
                 }
             }
             // Phase 5 — Rename sheet.
             .sheet(item: renameBinding) { shot in
                 RenameSheet(originalName: shot.name)
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $appState.isTagEditorPresented) {
+                TagEntrySheet()
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $appState.isCollectionPickerPresented) {
+                CollectionPickerSheet()
                     .environmentObject(appState)
             }
             // Phase 5 — bottom-trailing transient banner.
@@ -103,6 +115,25 @@ struct MainWindowView: View {
     private var itemCountText: String {
         let n = appState.filteredScreenshots.count
         return n == 1 ? "1 item" : "\(n) items"
+    }
+
+    /// Opens an `NSOpenPanel` filtered to the formats the importer can read,
+    /// and forwards the resulting URLs to `AppState.importURLs(_:)`.
+    private func presentImportPanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif, .bmp]
+        panel.prompt = "Import"
+        panel.message = "Select screenshots to add to your library"
+
+        guard panel.runModal() == .OK else { return }
+        let urls = panel.urls
+        guard !urls.isEmpty else { return }
+        Task {
+            await appState.importURLs(urls)
+        }
     }
 }
 

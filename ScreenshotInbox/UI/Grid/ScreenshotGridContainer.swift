@@ -26,6 +26,7 @@ struct ScreenshotGridContainer: View {
                 screenshots: appState.filteredScreenshots,
                 selectedIDs: appState.selectedScreenshotIDs,
                 layoutMode: appState.layoutMode,
+                thumbnailProvider: appState.thumbnailProvider,
                 onClick: handleClick,
                 onBackgroundClick: {
                     print("[GridContainer] background click — clear")
@@ -45,13 +46,23 @@ struct ScreenshotGridContainer: View {
                 },
                 onEmptyAreaMenu: {
                     ensureMenuController().emptyAreaMenu()
+                },
+                onFileDrop: { urls, unsupportedCount in
+                    Task {
+                        await appState.importDroppedFileURLs(
+                            urls,
+                            unsupportedCount: unsupportedCount
+                        )
+                    }
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider().opacity(0.4)
             #if DEBUG
-            DebugSelectionBar()
+            if appState.showDebugControls {
+                DebugSelectionBar()
+            }
             #endif
             footer
         }

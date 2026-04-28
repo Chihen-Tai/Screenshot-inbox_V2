@@ -1,11 +1,23 @@
 import SwiftUI
 
 struct TagsSectionView: View {
+    @EnvironmentObject private var appState: AppState
     let screenshot: Screenshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Tags")
+            HStack {
+                SectionHeader(title: "Tags")
+                Spacer(minLength: 0)
+                Button {
+                    appState.router.addTag([screenshot])
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10.5, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .help("Add Tag")
+            }
             if screenshot.tags.isEmpty {
                 Text("No tags")
                     .font(.system(size: 11))

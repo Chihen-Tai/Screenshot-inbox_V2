@@ -28,6 +28,18 @@ final class ScreenshotRepository {
         }
     }
 
+    func fetchInbox() throws -> [Screenshot] {
+        try fetchWhere("WHERE is_trashed = 0 ORDER BY imported_at DESC;")
+    }
+
+    func fetchTrashed() throws -> [Screenshot] {
+        try fetchWhere("WHERE is_trashed = 1 ORDER BY trash_date DESC, imported_at DESC;")
+    }
+
+    func fetchFavorites() throws -> [Screenshot] {
+        try fetchWhere("WHERE is_favorite = 1 AND is_trashed = 0 ORDER BY imported_at DESC;")
+    }
+
     func fetchByUUID(_ uuid: UUID) throws -> Screenshot? {
         guard let database else { return nil }
         return try database.queue.sync {
@@ -43,6 +55,18 @@ final class ScreenshotRepository {
             let stmt = try database.prepare("\(Self.selectColumns) WHERE file_hash = ? LIMIT 1;")
             try stmt.bind(1, hash)
             return try stmt.step() ? Self.row(from: stmt) : nil
+        }
+    }
+
+    private func fetchWhere(_ clause: String) throws -> [Screenshot] {
+        guard let database else { return [] }
+        return try database.queue.sync {
+            let stmt = try database.prepare("\(Self.selectColumns) \(clause)")
+            var rows: [Screenshot] = []
+            while try stmt.step() {
+                rows.append(Self.row(from: stmt))
+            }
+            return rows
         }
     }
 
@@ -116,6 +140,29 @@ final class ScreenshotRepository {
         }
     }
 
+    func updateFavorite(ids: [UUID], isFavorite: Bool) throws {
+        guard let database, !ids.isEmpty else { return }
+        try database.queue.sync {
+            try database.transaction {
+                let stmt = try database.prepare("""
+                UPDATE screenshots SET is_favorite = ?, modified_at = ? WHERE uuid = ?;
+                """)
+                let now = Date().timeIntervalSince1970
+                for id in ids {
+                    stmt.reset()
+                    try stmt.bindBool(1, isFavorite)
+                    try stmt.bind(2, now)
+                    try stmt.bind(3, id.uuidString.lowercased())
+                    _ = try stmt.step()
+                }
+            }
+        }
+    }
+
+    func restoreFromTrash(ids: [UUID]) throws {
+        try markTrashed(ids: ids, trashed: false)
+    }
+
     func delete(uuid: UUID) throws {
         guard let database else { return }
         try database.queue.sync {
@@ -128,16 +175,16 @@ final class ScreenshotRepository {
     // MARK: - Row mapping
 
     /// Column order MUST match the `columnXxx(_:)` indices in `row(from:)`.
-    private static let selectColumns = """
+    static let selectColumns = """
     SELECT
-        uuid, filename, library_path, file_hash,
-        width, height, file_size, format, source_app,
-        created_at, imported_at, modified_at,
-        is_favorite, is_trashed, trash_date, sort_index
+        screenshots.uuid, screenshots.filename, screenshots.library_path, screenshots.file_hash,
+        screenshots.width, screenshots.height, screenshots.file_size, screenshots.format, screenshots.source_app,
+        screenshots.created_at, screenshots.imported_at, screenshots.modified_at,
+        screenshots.is_favorite, screenshots.is_trashed, screenshots.trash_date, screenshots.sort_index
     FROM screenshots
     """
 
-    private static func row(from s: Database.Statement) -> Screenshot {
+    static func row(from s: Database.Statement) -> Screenshot {
         let uuidString = s.columnString(0) ?? UUID().uuidString
         let id = UUID(uuidString: uuidString) ?? UUID()
         let filename     = s.columnString(1) ?? ""

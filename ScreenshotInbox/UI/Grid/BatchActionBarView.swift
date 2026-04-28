@@ -21,19 +21,28 @@ struct BatchActionBarView: View {
 
                 Spacer(minLength: 8)
 
-                BatchButton(title: isCompact ? "Tag" : "Add Tag",
-                            systemImage: "tag",
-                            action: { appState.router.addTag(appState.selectedScreenshots) })
-                BatchButton(title: "Move",
-                            systemImage: "folder",
-                            action: { appState.router.moveToCollection(appState.selectedScreenshots) })
-                BatchButton(title: isCompact ? "PDF" : "Merge PDF",
-                            systemImage: "doc.on.doc",
-                            action: { appState.router.mergeIntoPDF(appState.selectedScreenshots) })
-                BatchButton(title: "Trash",
-                            systemImage: "trash",
-                            style: .destructive,
-                            action: { appState.router.moveToTrash(appState.selectedScreenshots) })
+                if appState.sidebarSelection == .trash {
+                    BatchButton(title: "Restore",
+                                systemImage: "arrow.uturn.backward",
+                                action: { appState.router.restoreFromTrash(appState.selectedScreenshots) })
+                } else {
+                    BatchButton(title: isCompact ? "Fav" : "Favorite",
+                                systemImage: "star",
+                                action: { appState.router.toggleFavorite(appState.selectedScreenshots) })
+                    BatchButton(title: isCompact ? "Tag" : "Add Tag",
+                                systemImage: "tag",
+                                action: { appState.router.addTag(appState.selectedScreenshots) })
+                    BatchButton(title: isCompact ? "Folder" : "Collection",
+                                systemImage: "folder",
+                                action: { appState.router.moveToCollection(appState.selectedScreenshots) })
+                    BatchButton(title: isCompact ? "PDF" : "Merge PDF",
+                                systemImage: "doc.on.doc",
+                                action: { appState.router.mergeIntoPDF(appState.selectedScreenshots) })
+                    BatchButton(title: "Trash",
+                                systemImage: "trash",
+                                style: .destructive,
+                                action: { appState.router.moveToTrash(appState.selectedScreenshots) })
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)

@@ -91,4 +91,73 @@ extension Migration {
         try db.exec("CREATE INDEX IF NOT EXISTS idx_screenshots_is_trashed  ON screenshots(is_trashed);")
         try db.exec("CREATE INDEX IF NOT EXISTS idx_screenshots_file_hash   ON screenshots(file_hash);")
     }
+
+    static let organizationSchema = Migration(version: 2) { db in
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS collections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'manual',
+            sort_index REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );
+        """)
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS collection_items (
+            collection_id INTEGER NOT NULL,
+            screenshot_uuid TEXT NOT NULL,
+            sort_index REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (collection_id, screenshot_uuid),
+            FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+        );
+        """)
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );
+        """)
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS screenshot_tags (
+            tag_id INTEGER NOT NULL,
+            screenshot_uuid TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (tag_id, screenshot_uuid),
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_collections_uuid ON collections(uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_collections_name ON collections(name);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_collection_items_screenshot_uuid ON collection_items(screenshot_uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_tags_uuid ON tags(uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_screenshot_tags_screenshot_uuid ON screenshot_tags(screenshot_uuid);")
+    }
+
+    static let autoImportSchema = Migration(version: 3) { db in
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS import_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            folder_path TEXT NOT NULL,
+            display_name TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            recursive INTEGER NOT NULL DEFAULT 0,
+            enabled_since TEXT,
+            last_scanned_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_import_sources_uuid ON import_sources(uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_import_sources_folder_path ON import_sources(folder_path);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_import_sources_is_enabled ON import_sources(is_enabled);")
+    }
 }

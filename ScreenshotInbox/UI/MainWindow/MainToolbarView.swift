@@ -9,6 +9,7 @@ struct MainToolbarView: ToolbarContent {
     let mode: Theme.LayoutMode
     @Binding var sidebarVisible: Bool
     @Binding var inspectorVisible: Bool
+    var onImport: () -> Void = {}
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
@@ -46,7 +47,9 @@ struct MainToolbarView: ToolbarContent {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
-            Button {} label: {
+            Button {
+                onImport()
+            } label: {
                 Label("Import", systemImage: "square.and.arrow.down")
             }
             .help("Import screenshots")

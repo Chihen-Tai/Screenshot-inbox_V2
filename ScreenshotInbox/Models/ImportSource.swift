@@ -1,10 +1,19 @@
 import Foundation
 
-/// A folder watched for new screenshots (e.g. ~/Desktop or ~/Pictures/Screenshots).
 struct ImportSource: Identifiable, Hashable {
-    let id: UUID
-    var displayName: String
-    var folderURL: URL
+    var id: Int?
+    var uuid: String
+    var folderPath: String
+    var displayName: String?
     var isEnabled: Bool
-    // TODO: security-scoped bookmark data, last scan timestamp, filename pattern.
+    var recursive: Bool
+    var enabledSince: Date?
+    var lastScannedAt: Date?
+    var createdAt: Date
+    var updatedAt: Date?
+
+    var effectiveDisplayName: String {
+        if let displayName, !displayName.isEmpty { return displayName }
+        return URL(fileURLWithPath: folderPath).lastPathComponent
+    }
 }

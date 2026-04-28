@@ -13,45 +13,54 @@ struct ActionsSectionView: View {
                     appState.router.open([screenshot])
                 }
                 rowDivider
-                ActionRow(title: "Quick Look",
-                          systemImage: "eye") {
-                    appState.router.quickLook([screenshot])
-                }
-                rowDivider
-                ActionRow(title: "Copy Image",
-                          systemImage: "doc.on.doc") {
-                    appState.router.copyImage([screenshot])
-                }
-                rowDivider
-                ActionRow(title: "Copy OCR Text",
-                          systemImage: "text.viewfinder") {
-                    appState.router.copyOCRText([screenshot])
-                }
-                rowDivider
                 ActionRow(title: "Reveal in Finder",
                           systemImage: "magnifyingglass") {
                     appState.router.revealInFinder([screenshot])
                 }
                 rowDivider
-                ActionRow(title: "Rename",
-                          systemImage: "pencil") {
-                    appState.router.rename(screenshot)
-                }
-                rowDivider
-                ActionRow(title: "Add Tag",
-                          systemImage: "tag") {
-                    appState.router.addTag([screenshot])
-                }
-                rowDivider
-                ActionRow(title: "Move to Collection",
-                          systemImage: "folder") {
-                    appState.router.moveToCollection([screenshot])
-                }
-                rowDivider
-                ActionRow(title: "Move to Trash",
-                          systemImage: "trash",
-                          isDestructive: true) {
-                    appState.router.moveToTrash([screenshot])
+                if screenshot.isTrashed {
+                    ActionRow(title: "Restore",
+                              systemImage: "arrow.uturn.backward") {
+                        appState.router.restoreFromTrash([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Delete Permanently",
+                              systemImage: "trash.slash",
+                              isDestructive: true,
+                              isEnabled: false) {
+                        appState.router.deletePermanentlyPlaceholder([screenshot])
+                    }
+                } else {
+                    ActionRow(title: screenshot.isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                              systemImage: screenshot.isFavorite ? "star.slash" : "star") {
+                        appState.router.toggleFavorite([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Quick Look",
+                              systemImage: "eye") {
+                        appState.router.quickLook([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Rename",
+                              systemImage: "pencil") {
+                        appState.router.rename(screenshot)
+                    }
+                    rowDivider
+                    ActionRow(title: "Add Tag",
+                              systemImage: "tag") {
+                        appState.router.addTag([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Add to Collection",
+                              systemImage: "folder") {
+                        appState.router.moveToCollection([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Move to Trash",
+                              systemImage: "trash",
+                              isDestructive: true) {
+                        appState.router.moveToTrash([screenshot])
+                    }
                 }
             }
             .background(
@@ -74,6 +83,7 @@ private struct ActionRow: View {
     let title: String
     let systemImage: String
     var isDestructive: Bool = false
+    var isEnabled: Bool = true
     let action: () -> Void
 
     @State private var isHovering = false
@@ -100,6 +110,8 @@ private struct ActionRow: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
         .onHover { isHovering = $0 }
     }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MetadataSectionView: View {
     let screenshot: Screenshot
+    var originalPath: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -12,6 +13,9 @@ struct MetadataSectionView: View {
                 row("Format",    screenshot.format)
                 row("File Size", humanSize(screenshot.byteSize))
                 row("Created",   Self.dateFormatter.string(from: screenshot.createdAt))
+                if let originalPath {
+                    row("Original", originalPath)
+                }
             }
         }
     }

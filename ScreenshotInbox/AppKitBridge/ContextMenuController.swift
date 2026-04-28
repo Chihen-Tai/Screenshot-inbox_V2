@@ -31,36 +31,46 @@ final class ContextMenuController {
         menu.autoenablesItems = false
 
         let n = targets.count
+        let isTrashView = appState.sidebarSelection == .trash
 
         add(menu, title: "Open",                              key: .open)
         add(menu, title: "Quick Look",                        key: .quickLook,
             keyEquivalent: " ", modifiers: [])
         add(menu, title: "Reveal in Finder",                  key: .revealInFinder)
-        if n == 1 {
+        if n == 1 && !isTrashView {
             add(menu, title: "Rename",                        key: .rename,
                 keyEquivalent: "\r", modifiers: [])
         }
         menu.addItem(.separator())
 
-        add(menu, title: n > 1 ? "Add Tag to \(n) Screenshots" : "Add Tag",
-            key: .addTag)
-        add(menu, title: n > 1 ? "Move \(n) Screenshots to Collection" : "Move to Collection",
-            key: .moveToCollection)
-        menu.addItem(.separator())
+        if isTrashView {
+            add(menu, title: n > 1 ? "Restore \(n) Screenshots" : "Restore",
+                key: .restoreFromTrash)
+            add(menu, title: "Delete Permanently", key: .deletePermanently, enabled: false)
+        } else {
+            add(menu,
+                title: favoriteTitle(for: targets),
+                key: .toggleFavorite)
+            add(menu, title: n > 1 ? "Add Tag to \(n) Screenshots" : "Add Tag",
+                key: .addTag)
+            add(menu, title: n > 1 ? "Add \(n) Screenshots to Collection" : "Add to Collection",
+                key: .moveToCollection)
+            menu.addItem(.separator())
 
-        add(menu, title: n > 1 ? "Copy \(n) Images" : "Copy Image",
-            key: .copyImage)
-        add(menu, title: n > 1 ? "Copy OCR Text from \(n) Screenshots" : "Copy OCR Text",
-            key: .copyOCRText)
-        if n > 1 {
-            add(menu, title: "Merge \(n) Screenshots into PDF", key: .mergeIntoPDF)
+            add(menu, title: n > 1 ? "Copy \(n) Images" : "Copy Image",
+                key: .copyImage)
+            add(menu, title: n > 1 ? "Copy OCR Text from \(n) Screenshots" : "Copy OCR Text",
+                key: .copyOCRText)
+            if n > 1 {
+                add(menu, title: "Merge \(n) Screenshots into PDF", key: .mergeIntoPDF)
+            }
+            menu.addItem(.separator())
+
+            add(menu,
+                title: n > 1 ? "Move \(n) Screenshots to Trash" : "Move to Trash",
+                key: .moveToTrash,
+                keyEquivalent: "\u{8}", modifiers: [])
         }
-        menu.addItem(.separator())
-
-        add(menu,
-            title: n > 1 ? "Move \(n) Screenshots to Trash" : "Move to Trash",
-            key: .moveToTrash,
-            keyEquivalent: "\u{8}", modifiers: [])
 
         return menu
     }
@@ -89,7 +99,8 @@ final class ContextMenuController {
                      title: String,
                      key: MenuActionKey,
                      keyEquivalent: String = "",
-                     modifiers: NSEvent.ModifierFlags = []) {
+                     modifiers: NSEvent.ModifierFlags = [],
+                     enabled: Bool = true) {
         let item = NSMenuItem(
             title: title,
             action: #selector(MenuActionInvoker.invoke(_:)),
@@ -98,8 +109,17 @@ final class ContextMenuController {
         item.keyEquivalentModifierMask = modifiers
         item.target = invoker
         item.representedObject = key.rawValue
-        item.isEnabled = true
+        item.isEnabled = enabled
         menu.addItem(item)
+    }
+
+    private func favoriteTitle(for targets: [Screenshot]) -> String {
+        let n = targets.count
+        let shouldFavorite = targets.contains { !$0.isFavorite }
+        if shouldFavorite {
+            return n > 1 ? "Add \(n) Screenshots to Favorites" : "Add to Favorites"
+        }
+        return n > 1 ? "Remove \(n) Screenshots from Favorites" : "Remove from Favorites"
     }
 }
 
@@ -119,6 +139,9 @@ private enum MenuActionKey: String {
     case copyOCRText
     case mergeIntoPDF
     case moveToTrash
+    case toggleFavorite
+    case restoreFromTrash
+    case deletePermanently
     case importScreenshots
     case newCollection
     case selectAll
@@ -161,6 +184,9 @@ private final class MenuActionInvoker: NSObject {
         case .copyOCRText:       router.copyOCRText(targets)
         case .mergeIntoPDF:      router.mergeIntoPDF(targets)
         case .moveToTrash:       router.moveToTrash(targets)
+        case .toggleFavorite:    router.toggleFavorite(targets)
+        case .restoreFromTrash:  router.restoreFromTrash(targets)
+        case .deletePermanently: router.deletePermanentlyPlaceholder(targets)
         case .importScreenshots: router.importScreenshots()
         case .newCollection:     router.newCollection()
         case .selectAll:         router.selectAll()

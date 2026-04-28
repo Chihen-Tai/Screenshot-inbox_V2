@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarItemView: View {
     let item: SidebarItem
+    var isDropTargeted: Bool = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -22,6 +23,18 @@ struct SidebarItemView: View {
             }
         }
         .padding(.vertical, Theme.Layout.sidebarRowVPadding)
+        .padding(.horizontal, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(isDropTargeted ? Theme.Palette.selectionFill : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(
+                    isDropTargeted ? Theme.Palette.selectionStroke.opacity(0.65) : Color.clear,
+                    lineWidth: 1
+                )
+        )
         .contentShape(Rectangle())
     }
 }

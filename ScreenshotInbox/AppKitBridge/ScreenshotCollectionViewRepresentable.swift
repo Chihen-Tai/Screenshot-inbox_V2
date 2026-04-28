@@ -16,15 +16,18 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     let screenshots: [Screenshot]
     let selectedIDs: Set<UUID>
     let layoutMode: Theme.LayoutMode
+    let thumbnailProvider: MacThumbnailProvider?
     let onClick: (UUID, NSEvent.ModifierFlags) -> Void
     let onBackgroundClick: () -> Void
     let onSelectAll: () -> Void
     let onClear: () -> Void
     let onItemMenu: (UUID) -> NSMenu?
     let onEmptyAreaMenu: () -> NSMenu?
+    let onFileDrop: ([URL], Int) -> Void
 
     func makeNSViewController(context: Context) -> ScreenshotCollectionViewController {
         let vc = ScreenshotCollectionViewController()
+        vc.thumbnailProvider = thumbnailProvider
         wireCallbacks(vc)
         vc.applyLayoutMode(layoutMode)
         vc.applyDataIfNeeded(screenshots: screenshots, selectedIDs: selectedIDs)
@@ -32,6 +35,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     }
 
     func updateNSViewController(_ vc: ScreenshotCollectionViewController, context: Context) {
+        vc.thumbnailProvider = thumbnailProvider
         wireCallbacks(vc)
         vc.applyLayoutMode(layoutMode)
         vc.applyDataIfNeeded(screenshots: screenshots, selectedIDs: selectedIDs)
@@ -44,5 +48,6 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
         vc.onClear = onClear
         vc.onItemMenu = onItemMenu
         vc.onEmptyAreaMenu = onEmptyAreaMenu
+        vc.onFileDrop = onFileDrop
     }
 }

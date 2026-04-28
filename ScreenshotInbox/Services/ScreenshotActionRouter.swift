@@ -43,7 +43,13 @@ final class ScreenshotActionRouter {
 
     func open(_ shots: [Screenshot]) {
         log("open", shots)
-        appState.showToast("Open is coming in a later phase", kind: .comingSoon)
+        guard let url = managedOriginalURL(for: shots.first) else { return }
+        do {
+            try appState.fileActionService.open(url)
+            appState.showToast("Opened \(url.lastPathComponent)", kind: .success)
+        } catch {
+            appState.showToast(fileActionMessage(for: error), kind: .info)
+        }
     }
 
     func quickLook(_ shots: [Screenshot]) {
@@ -54,8 +60,13 @@ final class ScreenshotActionRouter {
 
     func revealInFinder(_ shots: [Screenshot]) {
         log("revealInFinder", shots)
-        appState.showToast("Reveal in Finder isn't connected to real files yet",
-                           kind: .comingSoon)
+        guard let url = managedOriginalURL(for: shots.first) else { return }
+        do {
+            try appState.fileActionService.revealInFinder(url)
+            appState.showToast("Revealed in Finder", kind: .success)
+        } catch {
+            appState.showToast(fileActionMessage(for: error), kind: .info)
+        }
     }
 
     func rename(_ shot: Screenshot) {
@@ -65,13 +76,26 @@ final class ScreenshotActionRouter {
 
     func addTag(_ shots: [Screenshot]) {
         log("addTag", shots)
-        appState.showToast("Add Tag is coming in a later phase", kind: .comingSoon)
+        appState.beginAddTag(to: shots)
     }
 
     func moveToCollection(_ shots: [Screenshot]) {
         log("moveToCollection", shots)
-        appState.showToast("Move to Collection is coming in a later phase",
-                           kind: .comingSoon)
+        appState.beginAddToCollection(shots)
+    }
+
+    func toggleFavorite(_ shots: [Screenshot]) {
+        log("toggleFavorite", shots)
+        guard !shots.isEmpty else { return }
+        let shouldFavorite = shots.contains { !$0.isFavorite }
+        appState.setFavorite(ids: Set(shots.map(\.id)), isFavorite: shouldFavorite)
+        if shouldFavorite {
+            appState.showToast(shots.count == 1 ? "Added to Favorites" : "Added \(shots.count) screenshots to Favorites",
+                               kind: .success)
+        } else {
+            appState.showToast(shots.count == 1 ? "Removed from Favorites" : "Removed \(shots.count) screenshots from Favorites",
+                               kind: .success)
+        }
     }
 
     func copyImage(_ shots: [Screenshot]) {
@@ -112,7 +136,53 @@ final class ScreenshotActionRouter {
         appState.trash(ids: Set(shots.map(\.id)))
         let n = shots.count
         let suffix = n == 1 ? "" : "s"
-        appState.showToast("\(n) screenshot\(suffix) moved to Trash", kind: .success)
+        appState.showToast("Moved \(n) screenshot\(suffix) to Trash", kind: .success)
+    }
+
+    func restoreFromTrash(_ shots: [Screenshot]) {
+        log("restoreFromTrash", shots)
+        guard !shots.isEmpty else { return }
+        appState.untrash(ids: Set(shots.map(\.id)))
+        let n = shots.count
+        let suffix = n == 1 ? "" : "s"
+        appState.showToast("Restored \(n) screenshot\(suffix)", kind: .success)
+    }
+
+    func deletePermanentlyPlaceholder(_ shots: [Screenshot]) {
+        log("deletePermanentlyPlaceholder", shots)
+        appState.showToast("Permanent delete is coming in a later phase", kind: .comingSoon)
+    }
+
+    func handleDeleteKey(_ shots: [Screenshot]) {
+        if appState.sidebarSelection == .trash {
+            deletePermanentlyPlaceholder(shots)
+        } else {
+            moveToTrash(shots)
+        }
+    }
+
+    func addDraggedScreenshotsToFavorites(ids: [UUID]) {
+        print("[Router] sidebar favorite drop ids=\(ids.map(\.uuidString))")
+        let shots = appState.screenshots(for: ids).filter { !$0.isTrashed }
+        guard !shots.isEmpty else { return }
+        appState.setFavorite(ids: Set(shots.map(\.id)), isFavorite: true)
+        let n = shots.count
+        appState.showToast("Added \(n) screenshot\(n == 1 ? "" : "s") to Favorites",
+                           kind: .success)
+    }
+
+    func moveDraggedScreenshotsToTrash(ids: [UUID]) {
+        print("[Router] sidebar trash drop ids=\(ids.map(\.uuidString))")
+        let shots = appState.screenshots(for: ids).filter { !$0.isTrashed }
+        guard !shots.isEmpty else { return }
+        moveToTrash(shots)
+    }
+
+    func addDraggedScreenshots(ids: [UUID], toCollection collectionUUID: String) {
+        print("[Router] sidebar collection drop collection=\(collectionUUID) ids=\(ids.map(\.uuidString))")
+        let validIDs = appState.screenshots(for: ids).filter { !$0.isTrashed }.map(\.id)
+        guard !validIDs.isEmpty else { return }
+        appState.addScreenshots(ids: validIDs, toCollection: collectionUUID)
     }
 
     // MARK: - Empty-area / global actions
@@ -122,8 +192,7 @@ final class ScreenshotActionRouter {
     }
 
     func newCollection() {
-        appState.showToast("New Collection is coming in a later phase",
-                           kind: .comingSoon)
+        appState.createNewCollection()
     }
 
     func selectAll() {
@@ -140,5 +209,25 @@ final class ScreenshotActionRouter {
         let names = shots.prefix(3).map(\.name).joined(separator: ", ")
         let extra = shots.count > 3 ? " (+\(shots.count - 3) more)" : ""
         print("[Router] \(action) — \(shots.count) target(s): \(names)\(extra)")
+    }
+
+    private func managedOriginalURL(for shot: Screenshot?) -> URL? {
+        guard let shot else { return nil }
+        guard let url = appState.thumbnailProvider.originalURL(for: shot) else {
+            appState.showToast("File not found", kind: .info)
+            return nil
+        }
+        return url
+    }
+
+    private func fileActionMessage(for error: Error) -> String {
+        switch error {
+        case MacFileActionError.missingFile:
+            return "File not found"
+        case MacFileActionError.openFailed:
+            return "Could not open file"
+        default:
+            return "File action failed"
+        }
     }
 }

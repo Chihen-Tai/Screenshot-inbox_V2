@@ -11,6 +11,6 @@ struct SettingsView: View {
             AppearanceSettingsView()
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
         }
-        .frame(width: 480, height: 320)
+        .frame(width: 560, height: 420)
     }
 }

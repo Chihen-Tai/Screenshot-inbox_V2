@@ -7,7 +7,7 @@ struct OCRSectionView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "OCR Snippets")
             if screenshot.ocrSnippets.isEmpty {
-                Text(screenshot.isOCRComplete ? "No text detected" : "OCR pending")
+                Text(screenshot.isOCRComplete ? "No text detected" : "OCR not available yet")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.SemanticColor.secondaryLabel)
             } else {

@@ -6,14 +6,17 @@ import SwiftUI
 /// preview has visible feedback.
 struct ImagePreviewView: View {
     let screenshot: Screenshot
+    let thumbnailProvider: MacThumbnailProvider?
     let onClose: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             header
 
-            MockThumbnailView(kind: screenshot.thumbnailKind)
-                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            ScreenshotPreviewImageView(
+                screenshot: screenshot,
+                thumbnailProvider: thumbnailProvider
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(20)
 

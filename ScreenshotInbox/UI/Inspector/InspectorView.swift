@@ -67,8 +67,11 @@ struct InspectorView: View {
     private func singleState(_ shot: Screenshot) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Layout.inspectorSectionSpacing) {
-                PreviewBlock(screenshot: shot)
-                MetadataSectionView(screenshot: shot)
+                PreviewBlock(screenshot: shot, thumbnailProvider: appState.thumbnailProvider)
+                MetadataSectionView(
+                    screenshot: shot,
+                    originalPath: appState.thumbnailProvider.originalURL(for: shot)?.path
+                )
                 InspectorSeparator()
                 OCRSectionView(screenshot: shot)
                 InspectorSeparator()
@@ -109,11 +112,15 @@ struct InspectorSeparator: View {
 
 private struct PreviewBlock: View {
     let screenshot: Screenshot
+    let thumbnailProvider: MacThumbnailProvider?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Preview")
-            MockThumbnailView(kind: screenshot.thumbnailKind)
-                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            ScreenshotPreviewImageView(
+                screenshot: screenshot,
+                thumbnailProvider: thumbnailProvider
+            )
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.preview, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.Radius.preview, style: .continuous)

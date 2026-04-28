@@ -15,6 +15,8 @@ final class ScreenshotCollectionViewController: NSViewController {
     private(set) var screenshotIDs: [UUID] = []
     private var currentSelectedIDs: Set<UUID> = []
     private var isApplyingExternalSelection = false
+    private var pendingDragIDs: [UUID] = []
+    private var isInternalDragActive = false
 
     /// Click callback. The container resolves modifier flags to the right
     /// SelectionController call (replace / toggle / extendRange).
@@ -32,6 +34,9 @@ final class ScreenshotCollectionViewController: NSViewController {
     var onItemMenu: ((UUID) -> NSMenu?)?
     /// Phase 5 — right-click on grid background (no item under the cursor).
     var onEmptyAreaMenu: (() -> NSMenu?)?
+    /// Phase 6.5 — Finder/Desktop files dropped into the grid.
+    var onFileDrop: (([URL], Int) -> Void)?
+    var thumbnailProvider: MacThumbnailProvider?
 
     private let layout = ScreenshotCollectionViewLayout()
     private var currentLayoutMode: Theme.LayoutMode = .regular
@@ -85,6 +90,12 @@ final class ScreenshotCollectionViewController: NSViewController {
                 return self.onItemMenu?(id)
             }
             return self.onEmptyAreaMenu?()
+        }
+        cv.onFileDrop = { [weak self] urls, unsupportedCount in
+            self?.onFileDrop?(urls, unsupportedCount)
+        }
+        cv.onInternalDragEnded = { [weak self] in
+            self?.endInternalDrag()
         }
         cv.register(
             ScreenshotCollectionViewItem.self,
@@ -160,7 +171,90 @@ final class ScreenshotCollectionViewController: NSViewController {
         // the click — manually take focus so the next Cmd-A / Escape lands here.
         collectionView.window?.makeFirstResponder(collectionView)
         let id = screenshots[indexPath.item].id
+        let oldSelection = currentSelectedIDs
+        let sourceWasSelected = oldSelection.contains(id)
+        pendingDragIDs = sourceWasSelected
+            ? screenshotIDs.filter { oldSelection.contains($0) }
+            : [id]
+        print("[InternalDrag] mouse down item index=\(indexPath.item) uuid=\(id.uuidString) selected=\(sourceWasSelected)")
+
+        let normalizedMods = modifiers.intersection(.deviceIndependentFlagsMask)
+        let isPlainClick = normalizedMods.isEmpty || normalizedMods == .function
+        if sourceWasSelected && isPlainClick {
+            // Finder-style drag: pressing a selected item should not collapse
+            // the existing multi-selection before the drag threshold is met.
+            return
+        }
         onItemClick?(id, modifiers)
+    }
+
+    fileprivate func beginInternalDrag(from item: ScreenshotCollectionViewItem, event: NSEvent) {
+        guard !isInternalDragActive else { return }
+        guard let indexPath = collectionView.indexPath(for: item),
+              indexPath.item < screenshots.count else { return }
+        let clickedID = screenshots[indexPath.item].id
+        let ids = pendingDragIDs.isEmpty ? [clickedID] : pendingDragIDs
+        guard !ids.isEmpty else { return }
+        print("[DragSource] started item index=\(indexPath.item) uuid=\(clickedID.uuidString)")
+        print("[DragSource] dragged IDs: \(ids.map(\.uuidString))")
+        print("[DragSource] writing pasteboard type: \(InternalScreenshotDrag.pasteboardTypeString)")
+
+        let pasteboardItem = NSPasteboardItem()
+        pasteboardItem.setString(
+            InternalScreenshotDrag.encode(ids),
+            forType: InternalScreenshotDrag.pasteboardType
+        )
+        print("[DragSource] pasteboard item types after writing: \(pasteboardItem.types.map(\.rawValue))")
+        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+        let itemFrameInCollection = item.view.convert(item.view.bounds, to: collectionView)
+        draggingItem.setDraggingFrame(
+            itemFrameInCollection,
+            contents: dragImage(for: item, count: ids.count)
+        )
+        isInternalDragActive = true
+        collectionView.beginDraggingSession(with: [draggingItem], event: event, source: collectionView)
+    }
+
+    fileprivate func endInternalDrag() {
+        isInternalDragActive = false
+        pendingDragIDs.removeAll()
+    }
+
+    private func dragImage(for item: ScreenshotCollectionViewItem, count: Int) -> NSImage {
+        let bounds = item.view.bounds
+        let rep = item.view.bitmapImageRepForCachingDisplay(in: bounds)
+        let image = NSImage(size: bounds.size)
+        if let rep {
+            item.view.cacheDisplay(in: bounds, to: rep)
+            image.addRepresentation(rep)
+        }
+        guard count > 1 else { return image }
+
+        image.lockFocus()
+        let badgeSize = NSSize(width: 28, height: 22)
+        let badgeRect = NSRect(
+            x: max(0, bounds.width - badgeSize.width - 8),
+            y: max(0, bounds.height - badgeSize.height - 8),
+            width: badgeSize.width,
+            height: badgeSize.height
+        )
+        NSColor.controlAccentColor.withAlphaComponent(0.94).setFill()
+        NSBezierPath(roundedRect: badgeRect, xRadius: 11, yRadius: 11).fill()
+        let text = "\(count)"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let textSize = text.size(withAttributes: attrs)
+        text.draw(
+            at: NSPoint(
+                x: badgeRect.midX - textSize.width / 2,
+                y: badgeRect.midY - textSize.height / 2
+            ),
+            withAttributes: attrs
+        )
+        image.unlockFocus()
+        return image
     }
 }
 
@@ -183,7 +277,7 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
         guard let item = raw as? ScreenshotCollectionViewItem else { return raw }
         item.applyParams(currentParams)
         if indexPath.item < screenshots.count {
-            item.configure(with: screenshots[indexPath.item])
+            item.configure(with: screenshots[indexPath.item], thumbnailProvider: thumbnailProvider)
         }
         // Wire the item's click handler. Click semantics are owned by the
         // SelectionController via the controller's onItemClick callback.
@@ -191,6 +285,10 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
             guard let self, let item,
                   let path = self.collectionView.indexPath(for: item) else { return }
             self.dispatchClick(at: path, modifiers: mods)
+        }
+        item.onDrag = { [weak self, weak item] event in
+            guard let self, let item else { return }
+            self.beginInternalDrag(from: item, event: event)
         }
         return item
     }
@@ -229,17 +327,121 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     var onBackgroundClick: (() -> Void)?
     var onSelectAllShortcut: (() -> Void)?
     var onClearShortcut: (() -> Void)?
+    var onFileDrop: (([URL], Int) -> Void)?
+    var onInternalDragEnded: (() -> Void)?
     /// Phase 5 — invoked from `menu(for event:)`. Receives the click location
     /// in this view's coordinate space and returns the menu to display, or
     /// `nil` to suppress the menu entirely.
     var onMenuForLocation: ((NSPoint) -> NSMenu?)?
 
+    private let dropOverlayView = NSView()
+    private let dropOverlayLabel = NSTextField(labelWithString: "Drop screenshots to import")
+    private var isDropHighlightVisible = false
+
     override var acceptsFirstResponder: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureDropOverlay()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureDropOverlay()
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        registerForDraggedTypes([.fileURL])
         window?.makeFirstResponder(self)
         print("[Grid] viewDidMoveToWindow; window=\(window != nil); firstResponder=\(String(describing: window?.firstResponder))")
+    }
+
+    override func draggingSession(_ session: NSDraggingSession,
+                                  sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        .move
+    }
+
+    override func draggingSession(_ session: NSDraggingSession,
+                                  endedAt screenPoint: NSPoint,
+                                  operation: NSDragOperation) {
+        onInternalDragEnded?()
+    }
+
+    override func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
+        true
+    }
+
+    private func configureDropOverlay() {
+        wantsLayer = true
+
+        dropOverlayView.translatesAutoresizingMaskIntoConstraints = false
+        dropOverlayView.wantsLayer = true
+        dropOverlayView.layer?.cornerRadius = 12
+        dropOverlayView.layer?.borderWidth = 1
+        dropOverlayView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.38).cgColor
+        dropOverlayView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
+        dropOverlayView.isHidden = true
+
+        dropOverlayLabel.translatesAutoresizingMaskIntoConstraints = false
+        dropOverlayLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        dropOverlayLabel.textColor = .secondaryLabelColor
+        dropOverlayLabel.alignment = .center
+
+        addSubview(dropOverlayView)
+        dropOverlayView.addSubview(dropOverlayLabel)
+
+        NSLayoutConstraint.activate([
+            dropOverlayView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            dropOverlayView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            dropOverlayView.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            dropOverlayView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18),
+
+            dropOverlayLabel.centerXAnchor.constraint(equalTo: dropOverlayView.centerXAnchor),
+            dropOverlayLabel.centerYAnchor.constraint(equalTo: dropOverlayView.centerYAnchor),
+        ])
+    }
+
+    private func setDropHighlightVisible(_ visible: Bool) {
+        guard visible != isDropHighlightVisible else { return }
+        isDropHighlightVisible = visible
+        dropOverlayView.isHidden = !visible
+    }
+
+    private func acceptedDrop(from sender: NSDraggingInfo) -> DragDropController.FileDrop {
+        DragDropController.readFileDrop(from: sender.draggingPasteboard)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let drop = acceptedDrop(from: sender)
+        guard !drop.isEmpty else {
+            setDropHighlightVisible(false)
+            return []
+        }
+        setDropHighlightVisible(drop.hasSupportedFiles)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let drop = acceptedDrop(from: sender)
+        setDropHighlightVisible(drop.hasSupportedFiles)
+        return drop.isEmpty ? [] : .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        setDropHighlightVisible(false)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        setDropHighlightVisible(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let drop = acceptedDrop(from: sender)
+        setDropHighlightVisible(false)
+        guard !drop.isEmpty else { return false }
+        onFileDrop?(drop.supported, drop.unsupportedCount)
+        return true
     }
 
     override func mouseDown(with event: NSEvent) {

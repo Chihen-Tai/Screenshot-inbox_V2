@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Single grid cell. Hosts `MockThumbnailView` (SwiftUI) inside an
-/// `NSHostingView` and pairs it with two `NSTextField` labels.
+/// `NSHostingView` when no real thumbnail exists, otherwise an `NSImageView`,
+/// and pairs it with two `NSTextField` labels.
 ///
 /// Visual states:
 /// - default: subtle thumbnail container, no card border
@@ -17,6 +18,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     private let nameField = NSTextField(labelWithString: "")
     private let dateField = NSTextField(labelWithString: "")
     private let checkmarkView = NSImageView()
+    private let thumbnailImageView = NSImageView()
     private var thumbnailHost: NSHostingView<MockThumbnailView>!
     private var trackingArea: NSTrackingArea?
     private var isHovering = false
@@ -46,6 +48,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     /// dispatch single / Cmd / Shift selection without going through
     /// NSCollectionView's modifier-blind delegate.
     var onClick: ((NSEvent.ModifierFlags) -> Void)?
+    var onDrag: ((NSEvent) -> Void)?
 
     override func loadView() {
         let root = NSView()
@@ -67,6 +70,12 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         thumbnailHost = NSHostingView(rootView: MockThumbnailView(kind: .document))
         thumbnailHost.translatesAutoresizingMaskIntoConstraints = false
         thumbnailContainer.addSubview(thumbnailHost)
+
+        thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
+        thumbnailImageView.imageScaling = .scaleProportionallyUpOrDown
+        thumbnailImageView.imageAlignment = .alignCenter
+        thumbnailImageView.isHidden = true
+        thumbnailContainer.addSubview(thumbnailImageView)
 
         nameField.font = .systemFont(ofSize: currentParams.nameFontSize, weight: .medium)
         nameField.textColor = .labelColor
@@ -130,6 +139,11 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
             thumbnailHost.trailingAnchor.constraint(equalTo: thumbnailContainer.trailingAnchor),
             thumbnailHost.topAnchor.constraint(equalTo: thumbnailContainer.topAnchor),
             thumbnailHost.bottomAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor),
+
+            thumbnailImageView.leadingAnchor.constraint(equalTo: thumbnailContainer.leadingAnchor),
+            thumbnailImageView.trailingAnchor.constraint(equalTo: thumbnailContainer.trailingAnchor),
+            thumbnailImageView.topAnchor.constraint(equalTo: thumbnailContainer.topAnchor),
+            thumbnailImageView.bottomAnchor.constraint(equalTo: thumbnailContainer.bottomAnchor),
 
             nameLeadingConstraint,
             nameTrailingConstraint,
@@ -227,8 +241,17 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         trackingArea = area
     }
 
-    func configure(with screenshot: Screenshot) {
-        thumbnailHost.rootView = MockThumbnailView(kind: screenshot.thumbnailKind)
+    func configure(with screenshot: Screenshot, thumbnailProvider: MacThumbnailProvider?) {
+        if let image = thumbnailProvider?.loadThumbnail(for: screenshot, tier: .small) {
+            thumbnailImageView.image = image
+            thumbnailImageView.isHidden = false
+            thumbnailHost.isHidden = true
+        } else {
+            thumbnailImageView.image = nil
+            thumbnailImageView.isHidden = true
+            thumbnailHost.rootView = MockThumbnailView(kind: screenshot.thumbnailKind)
+            thumbnailHost.isHidden = false
+        }
         nameField.stringValue = screenshot.name
         dateField.stringValue = Self.dateFormatter.string(from: screenshot.createdAt)
     }
@@ -251,6 +274,10 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         super.prepareForReuse()
         isHovering = false
         onClick = nil
+        onDrag = nil
+        thumbnailImageView.image = nil
+        thumbnailImageView.isHidden = true
+        thumbnailHost.isHidden = false
         applyAppearance()
     }
 
@@ -260,6 +287,10 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     override func mouseDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         onClick?(mods)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        onDrag?(event)
     }
 
     private func applyAppearance() {
