@@ -17,9 +17,17 @@ final class AppState: ObservableObject {
     }
     @Published var activeFilterChip: FilterChip = .all
     @Published var searchQuery: String = ""
-    @Published var isAutoImportEnabled: Bool = UserDefaults.standard.object(forKey: "ScreenshotInbox.autoImport.enabled") as? Bool ?? true {
+    @Published var preferences: AppPreferences {
         didSet {
-            UserDefaults.standard.set(isAutoImportEnabled, forKey: Self.autoImportEnabledDefaultsKey)
+            settingsService.save(preferences)
+            applyPreferenceSideEffects(oldValue: oldValue)
+        }
+    }
+    @Published var isAutoImportEnabled: Bool = AppPreferences.defaults.autoImportEnabled {
+        didSet {
+            if preferences.autoImportEnabled != isAutoImportEnabled {
+                preferences.autoImportEnabled = isAutoImportEnabled
+            }
             if isAutoImportEnabled {
                 autoImportService.reloadWatchers()
             } else {
@@ -32,7 +40,23 @@ final class AppState: ObservableObject {
 
     @Published var layoutMode: Theme.LayoutMode = .regular
     @Published var sidebarOverrideVisible: Bool = false
-    @Published var inspectorOverrideVisible: Bool = false
+    @Published var inspectorOverrideVisible: Bool = true
+    @Published var sidebarPanelWidth: CGFloat = CGFloat(AppPreferences.defaults.sidebarPanelWidth) {
+        didSet {
+            let stored = Double(sidebarPanelWidth)
+            if preferences.sidebarPanelWidth != stored {
+                preferences.sidebarPanelWidth = stored
+            }
+        }
+    }
+    @Published var inspectorPanelWidth: CGFloat = CGFloat(AppPreferences.defaults.inspectorPanelWidth) {
+        didSet {
+            let stored = Double(inspectorPanelWidth)
+            if preferences.inspectorPanelWidth != stored {
+                preferences.inspectorPanelWidth = stored
+            }
+        }
+    }
 
     // MARK: - Phase 5 overlays
 
@@ -71,8 +95,15 @@ final class AppState: ObservableObject {
     private(set) var collectionRepository: CollectionRepository
     private(set) var tagRepository: TagRepository
     private(set) var importSourceRepository: ImportSourceRepository
+    private(set) var ocrRepository: OCRRepository
+    private(set) var detectedCodeRepository: DetectedCodeRepository
+    private(set) var settingsService: SettingsService
     private(set) var importService: ImportService
     private(set) var autoImportService: AutoImportService
+    private(set) var ocrQueueService: OCRQueueService
+    private(set) var codeDetectionQueueService: CodeDetectionQueueService
+    private(set) var searchService: SearchService
+    private(set) var pdfExportService: PDFExporting
     private(set) var thumbnailProvider: MacThumbnailProvider
     private(set) var fileActionService: MacFileActionService
     /// Legacy demo-mode flag. Runtime no longer seeds mock screenshots when
@@ -92,7 +123,14 @@ final class AppState: ObservableObject {
     @Published private(set) var collections: [ScreenshotCollection] = []
     @Published private(set) var collectionCountsByUUID: [String: Int] = [:]
     @Published private(set) var importSources: [ImportSource] = []
+    @Published private(set) var ocrResultsByScreenshotUUID: [String: OCRResult] = [:]
+    @Published private(set) var detectedCodesByScreenshotUUID: [String: [DetectedCode]] = [:]
+    @Published var isPDFExportSheetPresented: Bool = false
+    @Published var isPDFExporting: Bool = false
+    @Published var pdfExportOptions: PDFExportOptions = .defaults(outputPath: "")
+    @Published var pdfExportTargetIDs: [UUID] = []
     private var collectionScreenshotIDsByUUID: [String: Set<UUID>] = [:]
+    private var collectionNamesByScreenshotID: [UUID: [String]] = [:]
 
     /// All screenshots in the canonical order, including trashed.
     var allScreenshots: [Screenshot] {
@@ -107,7 +145,31 @@ final class AppState: ObservableObject {
 
     private var selectionForwarder: AnyCancellable?
     private var toastDismissTask: Task<Void, Never>?
-    private static let autoImportEnabledDefaultsKey = "ScreenshotInbox.autoImport.enabled"
+    #if DEBUG
+    private static func ensureDevelopmentImportSources(
+        in repository: ImportSourceRepository,
+        libraryRootURL: URL
+    ) throws {
+        let existing = try repository.fetchAll()
+        guard existing.isEmpty else { return }
+        let fileManager = FileManager.default
+        let candidates = [
+            fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first,
+            fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        ].compactMap { $0?.standardizedFileURL }
+        let libraryPath = libraryRootURL.standardizedFileURL.path
+        for url in candidates {
+            let path = url.path
+            guard path != libraryPath, !path.hasPrefix(libraryPath + "/") else { continue }
+            _ = try repository.create(
+                folderPath: path,
+                displayName: url.lastPathComponent,
+                recursive: false
+            )
+            print("[AutoImport] development default source added: \(path)")
+        }
+    }
+    #endif
 
     // MARK: - Init
 
@@ -116,18 +178,34 @@ final class AppState: ObservableObject {
         // we're in real-data or mock-only mode.
         let library = MacLibraryService()
         self.library = library
+        let settingsService = SettingsService()
+        let loadedPreferences = settingsService.preferences
+        self.settingsService = settingsService
+        self.preferences = loadedPreferences
+        self.isAutoImportEnabled = loadedPreferences.autoImportEnabled
+        self.sidebarOverrideVisible = loadedPreferences.sidebarVisibleByDefault
+        self.inspectorOverrideVisible = loadedPreferences.inspectorVisibleByDefault
+        self.sidebarPanelWidth = CGFloat(loadedPreferences.sidebarPanelWidth)
+        self.inspectorPanelWidth = CGFloat(loadedPreferences.inspectorPanelWidth)
+        #if DEBUG
+        self.showDebugControls = loadedPreferences.showDebugControls
+        #endif
 
         var database: Database? = nil
         var repository = ScreenshotRepository()
         var collectionRepository = CollectionRepository()
         var tagRepository = TagRepository()
         var importSourceRepository = ImportSourceRepository()
+        var ocrRepository = OCRRepository()
+        var detectedCodeRepository = DetectedCodeRepository()
         var loaded: [Screenshot] = []
         var loadedCollections: [ScreenshotCollection] = []
         var loadedCollectionCounts: [String: Int] = [:]
         var loadedCollectionMemberships: [String: Set<UUID>] = [:]
         var loadedTagsByScreenshotUUID: [String: [Tag]] = [:]
         var loadedImportSources: [ImportSource] = []
+        var loadedOCRResults: [String: OCRResult] = [:]
+        var loadedDetectedCodes: [String: [DetectedCode]] = [:]
 
         do {
             try library.bootstrap()
@@ -136,15 +214,26 @@ final class AppState: ObservableObject {
             migrations.register(.initialSchema)
             migrations.register(.organizationSchema)
             migrations.register(.autoImportSchema)
+            migrations.register(.ocrSchema)
+            migrations.register(.detectedCodesSchema)
             try migrations.runPending(on: db)
 
             let repo = ScreenshotRepository(database: db)
             let collectionsRepo = CollectionRepository(database: db)
             let tagsRepo = TagRepository(database: db)
             let importSourcesRepo = ImportSourceRepository(database: db)
+            let ocrRepo = OCRRepository(database: db)
+            let codesRepo = DetectedCodeRepository(database: db)
             try collectionsRepo.ensureDefaultCollections()
+            #if DEBUG
+            // TODO: Replace development default Desktop/Downloads watchers with user-configurable Auto Import settings before release.
+            try Self.ensureDevelopmentImportSources(in: importSourcesRepo, libraryRootURL: library.libraryRootURL)
+            #endif
             loaded = try repo.fetchAll(includeTrashed: true)
+            try ocrRepo.ensurePending(for: loaded.map(\.uuidString))
             loadedTagsByScreenshotUUID = try tagsRepo.tagsByScreenshotUUID()
+            loadedOCRResults = Dictionary(uniqueKeysWithValues: try ocrRepo.fetchAll().map { ($0.screenshotUUID, $0) })
+            loadedDetectedCodes = Dictionary(grouping: try codesRepo.fetchAll(), by: \.screenshotUUID)
             loadedCollections = try collectionsRepo.fetchCollections()
             loadedCollectionCounts = try collectionsRepo.countsByCollectionUUID()
             loadedImportSources = try importSourcesRepo.fetchAll()
@@ -158,6 +247,8 @@ final class AppState: ObservableObject {
             collectionRepository = collectionsRepo
             tagRepository = tagsRepo
             importSourceRepository = importSourcesRepo
+            ocrRepository = ocrRepo
+            detectedCodeRepository = codesRepo
             print("[AppState] persistence ok: rows=\(loaded.count) at \(library.databaseURL.path)")
         } catch {
             print("[AppState] persistence bootstrap failed — falling back to mocks: \(error)")
@@ -167,6 +258,8 @@ final class AppState: ObservableObject {
         self.collectionRepository = collectionRepository
         self.tagRepository = tagRepository
         self.importSourceRepository = importSourceRepository
+        self.ocrRepository = ocrRepository
+        self.detectedCodeRepository = detectedCodeRepository
 
         let metadataReader: ImageMetadataReading = MacImageMetadataReader()
         let thumbnailService: ThumbnailGenerating = MacThumbnailService(library: library)
@@ -182,6 +275,22 @@ final class AppState: ObservableObject {
             fileWatcher: MacFileWatcherService(),
             libraryRootURL: library.libraryRootURL
         )
+        let ocrService = MacOCRService(library: library) { [weak settingsService] in
+            settingsService?.preferences.ocrPreferredLanguages ?? AppPreferences.defaults.ocrPreferredLanguages
+        }
+        self.ocrQueueService = OCRQueueService(
+            repository: ocrRepository,
+            screenshotRepository: repository,
+            ocrService: ocrService
+        )
+        let codeDetectionService = MacCodeDetectionService(library: library)
+        self.codeDetectionQueueService = CodeDetectionQueueService(
+            repository: detectedCodeRepository,
+            screenshotRepository: repository,
+            detectionService: codeDetectionService
+        )
+        self.searchService = SearchService()
+        self.pdfExportService = MacPDFExportService(library: library)
         self.thumbnailProvider = MacThumbnailProvider(library: library)
         self.fileActionService = MacFileActionService()
 
@@ -190,6 +299,7 @@ final class AppState: ObservableObject {
         if !loaded.isEmpty {
             for index in loaded.indices {
                 loaded[index].tags = loadedTagsByScreenshotUUID[loaded[index].id.uuidString.lowercased()]?.map(\.name) ?? []
+                Self.applyOCR(loadedOCRResults[loaded[index].uuidString], to: &loaded[index])
             }
             self.orderedIDs = loaded.map(\.id)
             self.screenshotsByID = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
@@ -203,6 +313,8 @@ final class AppState: ObservableObject {
         self.collectionCountsByUUID = loadedCollectionCounts
         self.collectionScreenshotIDsByUUID = loadedCollectionMemberships
         self.importSources = loadedImportSources
+        self.ocrResultsByScreenshotUUID = loadedOCRResults
+        self.detectedCodesByScreenshotUUID = loadedDetectedCodes
 
         let controller = SelectionController()
         self.selection = controller
@@ -220,6 +332,34 @@ final class AppState: ObservableObject {
         }
         print("[AppState] init instance:", ObjectIdentifier(self), "mock=\(isUsingMockData)")
         startAutoImport()
+        startOCRQueue()
+        startCodeDetectionQueue()
+    }
+
+    private func applyPreferenceSideEffects(oldValue: AppPreferences) {
+        if oldValue.inspectorVisibleByDefault != preferences.inspectorVisibleByDefault {
+            inspectorOverrideVisible = preferences.inspectorVisibleByDefault
+        }
+        if oldValue.sidebarVisibleByDefault != preferences.sidebarVisibleByDefault {
+            sidebarOverrideVisible = preferences.sidebarVisibleByDefault
+        }
+        if oldValue.sidebarPanelWidth != preferences.sidebarPanelWidth,
+           sidebarPanelWidth != CGFloat(preferences.sidebarPanelWidth) {
+            sidebarPanelWidth = CGFloat(preferences.sidebarPanelWidth)
+        }
+        if oldValue.inspectorPanelWidth != preferences.inspectorPanelWidth,
+           inspectorPanelWidth != CGFloat(preferences.inspectorPanelWidth) {
+            inspectorPanelWidth = CGFloat(preferences.inspectorPanelWidth)
+        }
+        if oldValue.autoImportEnabled != preferences.autoImportEnabled,
+           isAutoImportEnabled != preferences.autoImportEnabled {
+            isAutoImportEnabled = preferences.autoImportEnabled
+        }
+        #if DEBUG
+        if oldValue.showDebugControls != preferences.showDebugControls {
+            showDebugControls = preferences.showDebugControls
+        }
+        #endif
     }
 
     // MARK: - Filtering
@@ -248,20 +388,25 @@ final class AppState: ObservableObject {
         case .smart(.thisWeek):
             let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
             base = nonTrashed.filter { $0.createdAt > cutoff }
-        case .settings:
-            base = []
         }
 
+        let chipFiltered: [Screenshot]
         switch activeFilterChip {
-        case .all:         return base
-        case .favorites:   return base.filter(\.isFavorite)
-        case .ocrComplete: return base.filter(\.isOCRComplete)
-        case .tagged:      return base.filter { !$0.tags.isEmpty }
-        case .png:         return base.filter { $0.format == "PNG" }
+        case .all:         chipFiltered = base
+        case .favorites:   chipFiltered = base.filter(\.isFavorite)
+        case .ocrComplete: chipFiltered = base.filter(\.isOCRComplete)
+        case .tagged:      chipFiltered = base.filter { !$0.tags.isEmpty }
+        case .png:         chipFiltered = base.filter { $0.format == "PNG" }
         case .thisWeek:
             let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
-            return base.filter { $0.createdAt > cutoff }
+            chipFiltered = base.filter { $0.createdAt > cutoff }
         }
+        return searchService.filter(
+            chipFiltered,
+            query: searchQuery,
+            collectionNamesByScreenshotID: collectionNamesByScreenshotID,
+            detectedCodesByScreenshotID: detectedCodesByScreenshotUUID
+        )
     }
 
     var displayTitle: String {
@@ -292,7 +437,11 @@ final class AppState: ObservableObject {
     }
 
     var ocrPendingCount: Int {
-        allScreenshots.filter { !$0.isTrashed && !$0.isOCRComplete }.count
+        allScreenshots.filter {
+            !$0.isTrashed && (ocrResultsByScreenshotUUID[$0.uuidString]?.status == .pending ||
+                              ocrResultsByScreenshotUUID[$0.uuidString]?.status == .processing ||
+                              ocrResultsByScreenshotUUID[$0.uuidString] == nil)
+        }.count
     }
 
     var duplicatesCount: Int {
@@ -419,15 +568,27 @@ final class AppState: ObservableObject {
             collections = try collectionRepository.fetchCollections()
             collectionCountsByUUID = try collectionRepository.countsByCollectionUUID()
             var memberships: [String: Set<UUID>] = [:]
+            var namesByScreenshotID: [UUID: [String]] = [:]
             for collection in collections {
                 let shots = try collectionRepository.fetchScreenshots(inCollection: collection.uuid)
-                memberships[collection.uuid] = Set(shots.map(\.id))
+                let ids = Set(shots.map(\.id))
+                memberships[collection.uuid] = ids
+                for id in ids {
+                    namesByScreenshotID[id, default: []].append(collection.name)
+                }
             }
             collectionScreenshotIDsByUUID = memberships
+            collectionNamesByScreenshotID = namesByScreenshotID
 
             let tagsByScreenshotUUID = try tagRepository.tagsByScreenshotUUID()
+            let ocrResults = try ocrRepository.fetchAll()
+            ocrResultsByScreenshotUUID = Dictionary(uniqueKeysWithValues: ocrResults.map { ($0.screenshotUUID, $0) })
             for id in orderedIDs {
                 screenshotsByID[id]?.tags = tagsByScreenshotUUID[id.uuidString.lowercased()]?.map(\.name) ?? []
+                if var screenshot = screenshotsByID[id] {
+                    Self.applyOCR(ocrResultsByScreenshotUUID[id.uuidString.lowercased()], to: &screenshot)
+                    screenshotsByID[id] = screenshot
+                }
             }
             objectWillChange.send()
             if pruneSelection { pruneSelectionToVisible() }
@@ -435,6 +596,111 @@ final class AppState: ObservableObject {
         } catch {
             print("[AppState] organization refresh failed: \(error)")
         }
+    }
+
+    // MARK: - OCR
+
+    func startOCRQueue() {
+        guard database != nil else { return }
+        ocrQueueService.start { [weak self] in
+            self?.refreshOCRState()
+        }
+    }
+
+    func refreshOCRState() {
+        do {
+            let results = try ocrRepository.fetchAll()
+            ocrResultsByScreenshotUUID = Dictionary(uniqueKeysWithValues: results.map { ($0.screenshotUUID, $0) })
+            for id in orderedIDs {
+                if var screenshot = screenshotsByID[id] {
+                    Self.applyOCR(ocrResultsByScreenshotUUID[id.uuidString.lowercased()], to: &screenshot)
+                    screenshotsByID[id] = screenshot
+                }
+            }
+            objectWillChange.send()
+            pruneSelectionToVisible()
+        } catch {
+            print("[OCR] refresh failed: \(error)")
+        }
+    }
+
+    func ocrResult(for screenshot: Screenshot) -> OCRResult? {
+        ocrResultsByScreenshotUUID[screenshot.uuidString]
+    }
+
+    func rerunOCR(for shots: [Screenshot]) {
+        let valid = shots.filter { $0.libraryPath != nil }
+        guard !valid.isEmpty else {
+            showToast("No screenshots available for OCR", kind: .info)
+            return
+        }
+        ocrQueueService.rerun(valid)
+        showToast(valid.count == 1 ? "Re-running OCR" : "Re-running OCR for \(valid.count) screenshots", kind: .info)
+    }
+
+    private static func applyOCR(_ result: OCRResult?, to screenshot: inout Screenshot) {
+        guard let result else {
+            screenshot.ocrSnippets = []
+            screenshot.isOCRComplete = false
+            return
+        }
+        let text = result.text ?? ""
+        screenshot.ocrSnippets = text
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        screenshot.isOCRComplete = result.status == .complete
+    }
+
+    // MARK: - Code Detection
+
+    func startCodeDetectionQueue() {
+        guard database != nil else { return }
+        codeDetectionQueueService.start(screenshots: allScreenshots) { [weak self] in
+            self?.refreshDetectedCodes()
+        }
+    }
+
+    func refreshDetectedCodes() {
+        do {
+            detectedCodesByScreenshotUUID = Dictionary(
+                grouping: try detectedCodeRepository.fetchAll(),
+                by: \.screenshotUUID
+            )
+            objectWillChange.send()
+        } catch {
+            print("[CodeDetection] refresh failed: \(error)")
+        }
+    }
+
+    func detectedCodes(for screenshot: Screenshot) -> [DetectedCode] {
+        detectedCodesByScreenshotUUID[screenshot.uuidString] ?? []
+    }
+
+    func rerunCodeDetection(for shots: [Screenshot]) {
+        let valid = shots.filter { $0.libraryPath != nil }
+        guard !valid.isEmpty else {
+            showToast("No screenshots available for QR detection", kind: .info)
+            return
+        }
+        codeDetectionQueueService.rerun(valid)
+        showToast(valid.count == 1 ? "Re-detecting codes" : "Re-detecting codes for \(valid.count) screenshots", kind: .info)
+    }
+
+    func copyDetectedCode(_ code: DetectedCode) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(code.payload, forType: .string)
+        showToast(code.isURL ? "Copied link" : "Copied text", kind: .success)
+    }
+
+    func openDetectedCode(_ code: DetectedCode) {
+        guard code.isURL,
+              let url = URL(string: code.payload.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            showToast("Detected code is not a link", kind: .info)
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Auto Import
@@ -495,6 +761,28 @@ final class AppState: ObservableObject {
         }
     }
 
+    func revealLibraryInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([library.libraryRootURL])
+    }
+
+    func resetLayoutPreferences() {
+        preferences.inspectorVisibleByDefault = AppPreferences.defaults.inspectorVisibleByDefault
+        preferences.sidebarVisibleByDefault = AppPreferences.defaults.sidebarVisibleByDefault
+        preferences.preferredAppearance = AppPreferences.defaults.preferredAppearance
+        inspectorOverrideVisible = preferences.inspectorVisibleByDefault
+        sidebarOverrideVisible = preferences.sidebarVisibleByDefault
+        showToast("Layout preferences reset", kind: .success)
+    }
+
+    func setOCRLanguagePreset(_ preset: OCRLanguagePreset) {
+        preferences.ocrLanguagePreset = preset
+        preferences.ocrPreferredLanguages = preset.languages
+    }
+
+    func checkLibraryIntegrityPlaceholder() {
+        showToast("Library integrity check is coming later", kind: .comingSoon)
+    }
+
     func deleteImportSource(_ source: ImportSource) {
         do {
             try importSourceRepository.delete(uuid: source.uuid)
@@ -514,6 +802,9 @@ final class AppState: ObservableObject {
     private func handleAutoImportResult(_ result: AutoImportResult) {
         applyImportResult(result.importResult, selectImported: false)
         refreshImportSources(reloadWatchers: false)
+        #if DEBUG
+        print("[AutoImport] refresh complete")
+        #endif
         let imported = result.importResult.imported.count
         if imported > 0 {
             showToast("Auto-imported \(imported) screenshot\(imported == 1 ? "" : "s")", kind: .success)
@@ -813,6 +1104,10 @@ final class AppState: ObservableObject {
             orderedIDs.insert(shot.id, at: 0)
             screenshotsByID[shot.id] = shot
         }
+        if !result.imported.isEmpty {
+            ocrQueueService.enqueue(result.imported)
+            codeDetectionQueueService.enqueue(result.imported)
+        }
         objectWillChange.send()
         refreshOrganizationState(pruneSelection: false)
 
@@ -857,6 +1152,89 @@ final class AppState: ObservableObject {
         "\(count) unsupported file\(count == 1 ? "" : "s") ignored"
     }
 
+    // MARK: - PDF Export
+
+    func beginPDFExport(_ shots: [Screenshot]) {
+        guard !shots.isEmpty else {
+            showToast("Select screenshots to export", kind: .info)
+            return
+        }
+        pdfExportTargetIDs = shots.map(\.id)
+        pdfExportOptions = .defaults(outputPath: defaultPDFExportPath())
+        isPDFExportSheetPresented = true
+    }
+
+    func cancelPDFExport() {
+        guard !isPDFExporting else { return }
+        isPDFExportSheetPresented = false
+        pdfExportTargetIDs = []
+    }
+
+    func exportPDF() async {
+        guard !isPDFExporting else { return }
+        let shots = screenshots(for: pdfExportTargetIDs)
+        guard !shots.isEmpty else {
+            showToast("Select screenshots to export", kind: .info)
+            return
+        }
+        var options = pdfExportOptions
+        if !options.outputPath.lowercased().hasSuffix(".pdf") {
+            options.outputPath += ".pdf"
+            pdfExportOptions = options
+        }
+        isPDFExporting = true
+        do {
+            let result = try await pdfExportService.export(screenshots: shots, options: options)
+            isPDFExporting = false
+            isPDFExportSheetPresented = false
+            pdfExportTargetIDs = []
+            var message = "Exported PDF"
+            if result.skippedCount > 0 {
+                message += " (\(result.skippedCount) skipped)"
+            }
+            showToast(message, kind: .success)
+        } catch PDFExportError.noRenderableImages {
+            isPDFExporting = false
+            showToast("No source images found", kind: .info)
+        } catch {
+            isPDFExporting = false
+            print("[PDFExport] failed: \(error)")
+            showToast("Could not export PDF", kind: .info)
+        }
+    }
+
+    var pdfExportTargetCount: Int {
+        pdfExportTargetIDs.count
+    }
+
+    private func defaultPDFExportPath() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let filename = "Screenshot Export \(formatter.string(from: Date())).pdf"
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        let folder = downloads ?? library.libraryRootURL.appendingPathComponent("Exports/PDFs", isDirectory: true)
+        return uniqueExportURL(in: folder, filename: filename).path
+    }
+
+    private func uniqueExportURL(in folder: URL, filename: String) -> URL {
+        let fileManager = FileManager.default
+        let base = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        func candidate(_ suffix: Int?) -> URL {
+            let stem = suffix.map { "\(base) \($0)" } ?? base
+            let name = ext.isEmpty ? stem : "\(stem).\(ext)"
+            return folder.appendingPathComponent(name)
+        }
+        var url = candidate(nil)
+        guard fileManager.fileExists(atPath: url.path) else { return url }
+        var index = 2
+        repeat {
+            url = candidate(index)
+            index += 1
+        } while fileManager.fileExists(atPath: url.path)
+        return url
+    }
+
     // MARK: - Preview overlay
 
     func beginPreview(of shot: Screenshot) {
@@ -886,20 +1264,122 @@ final class AppState: ObservableObject {
     func commitRename() {
         guard let id = renamingScreenshotID else { return }
         let trimmed = pendingRenameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            screenshotsByID[id]?.name = trimmed
-            screenshotsByID[id]?.modifiedAt = Date()
-            if let updated = screenshotsByID[id], updated.libraryPath != nil {
+        guard !trimmed.isEmpty, var updated = screenshotsByID[id] else { return }
+        #if DEBUG
+        print("[Rename] requested uuid=\(id.uuidString.lowercased()) newName=\(trimmed)")
+        #endif
+        do {
+            if updated.libraryPath != nil {
+                let oldLibraryPath = updated.libraryPath
+                updated = try renamedManagedCopy(updated, requestedName: trimmed)
                 do {
                     try repository.update(updated)
                 } catch {
-                    print("[AppState] rename persist failed: \(error)")
+                    rollbackManagedRenameIfNeeded(from: updated.libraryPath, to: oldLibraryPath)
+                    throw error
                 }
+                #if DEBUG
+                print("[Rename] repository updated")
+                #endif
+            } else {
+                updated.name = trimmed
+                updated.modifiedAt = Date()
             }
+            screenshotsByID[id] = updated
             objectWillChange.send()
+            #if DEBUG
+            print("[Rename] AppState updated")
+            print("[Rename] inspector selected filename=\(primarySelection?.name ?? "nil")")
+            #endif
             showToast("Renamed", kind: .success)
+        } catch RenameError.managedFileMissing {
+            showToast("Managed file not found", kind: .info)
+        } catch {
+            print("[AppState] rename persist failed: \(error)")
+            showToast("Rename failed", kind: .info)
         }
         cancelRename()
+    }
+
+    private func renamedManagedCopy(_ shot: Screenshot, requestedName: String) throws -> Screenshot {
+        guard let libraryPath = shot.libraryPath else { return shot }
+        let sourceURL = library.libraryRootURL.appendingPathComponent(libraryPath)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: sourceURL.path) else {
+            throw RenameError.managedFileMissing
+        }
+        let ext = sourceURL.pathExtension
+        let baseName = sanitizedFileBaseName(from: requestedName, fallback: sourceURL.deletingPathExtension().lastPathComponent)
+        let targetURL = uniqueManagedRenameURL(
+            directory: sourceURL.deletingLastPathComponent(),
+            baseName: baseName,
+            extension: ext,
+            originalURL: sourceURL
+        )
+        var updated = shot
+        if targetURL != sourceURL {
+            try fileManager.moveItem(at: sourceURL, to: targetURL)
+            updated.libraryPath = libraryRelativePath(for: targetURL)
+        }
+        updated.name = targetURL.lastPathComponent
+        updated.modifiedAt = Date()
+        return updated
+    }
+
+    private func sanitizedFileBaseName(from name: String, fallback: String) -> String {
+        let withoutExtension = (name as NSString).deletingPathExtension
+        let invalid = CharacterSet(charactersIn: "/:")
+        let sanitized = withoutExtension
+            .components(separatedBy: invalid)
+            .joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return sanitized.isEmpty ? fallback : sanitized
+    }
+
+    private func uniqueManagedRenameURL(
+        directory: URL,
+        baseName: String,
+        extension ext: String,
+        originalURL: URL
+    ) -> URL {
+        let fileManager = FileManager.default
+        func candidate(_ suffix: Int?) -> URL {
+            let stem = suffix.map { "\(baseName) \($0)" } ?? baseName
+            let filename = ext.isEmpty ? stem : "\(stem).\(ext)"
+            return directory.appendingPathComponent(filename)
+        }
+        var url = candidate(nil)
+        if url == originalURL || !fileManager.fileExists(atPath: url.path) { return url }
+        var index = 2
+        repeat {
+            url = candidate(index)
+            index += 1
+        } while url != originalURL && fileManager.fileExists(atPath: url.path)
+        return url
+    }
+
+    private func libraryRelativePath(for url: URL) -> String {
+        let rootPath = library.libraryRootURL.path
+        let absolute = url.path
+        if absolute.hasPrefix(rootPath) {
+            var trimmed = String(absolute.dropFirst(rootPath.count))
+            if trimmed.hasPrefix("/") { trimmed.removeFirst() }
+            return trimmed
+        }
+        return absolute
+    }
+
+    private func rollbackManagedRenameIfNeeded(from newPath: String?, to oldPath: String?) {
+        guard let newPath, let oldPath, newPath != oldPath else { return }
+        let newURL = library.libraryRootURL.appendingPathComponent(newPath)
+        let oldURL = library.libraryRootURL.appendingPathComponent(oldPath)
+        guard FileManager.default.fileExists(atPath: newURL.path),
+              !FileManager.default.fileExists(atPath: oldURL.path) else { return }
+        do {
+            try FileManager.default.moveItem(at: newURL, to: oldURL)
+        } catch {
+            print("[Rename] rollback failed: \(error)")
+        }
     }
 
     /// Resolves the currently renaming screenshot.
@@ -934,4 +1414,8 @@ struct ToastMessage: Identifiable, Equatable {
         case success
         case comingSoon
     }
+}
+
+private enum RenameError: Error {
+    case managedFileMissing
 }

@@ -78,6 +78,10 @@ struct MainWindowView: View {
                 CollectionPickerSheet()
                     .environmentObject(appState)
             }
+            .sheet(isPresented: $appState.isPDFExportSheetPresented) {
+                PDFExportSheet()
+                    .environmentObject(appState)
+            }
             // Phase 5 — bottom-trailing transient banner.
             .overlay(alignment: .bottomTrailing) {
                 if let toast = appState.toast {

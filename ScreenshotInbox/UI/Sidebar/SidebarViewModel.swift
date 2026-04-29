@@ -8,6 +8,17 @@ struct SidebarItem: Identifiable, Hashable {
     var id: SidebarSelection { selection }
 }
 
+enum SidebarAction: Hashable {
+    case settings
+}
+
+struct SidebarActionItem: Identifiable, Hashable {
+    let action: SidebarAction
+    let title: String
+    let systemImage: String
+    var id: SidebarAction { action }
+}
+
 /// Thin Phase-2 view model that owns mock sidebar data.
 /// Phase 3: replace with `LibraryService`-driven sections.
 @MainActor
@@ -15,7 +26,11 @@ final class SidebarViewModel: ObservableObject {
     let library: [SidebarItem]
     let collections: [SidebarItem]
     let smart: [SidebarItem]
-    let settingsItem: SidebarItem
+    let settingsAction = SidebarActionItem(
+        action: .settings,
+        title: "Settings",
+        systemImage: "gearshape"
+    )
 
     init() {
         self.library = [
@@ -36,6 +51,5 @@ final class SidebarViewModel: ObservableObject {
             SidebarItem(selection: .smart(.duplicates), title: "Duplicates",  systemImage: "square.on.square",  count: 2),
             SidebarItem(selection: .smart(.thisWeek),   title: "This Week",   systemImage: "calendar",          count: 6),
         ]
-        self.settingsItem = SidebarItem(selection: .settings, title: "Settings", systemImage: "gearshape", count: nil)
     }
 }

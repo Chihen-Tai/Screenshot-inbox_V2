@@ -46,12 +46,13 @@ final class AutoImportService {
         do {
             let sources = try importSourceRepository.fetchEnabled()
                 .filter { !isLibraryOrInsideLibrary(URL(fileURLWithPath: $0.folderPath, isDirectory: true)) }
+            debugLog("loaded sources: \(sources.map(\.folderPath))")
             fileWatcher.replaceWatchedSources(sources) { [weak self] source, urls in
                 Task { @MainActor in
                     self?.handleDetectedURLs(urls, from: source)
                 }
             }
-            print("[AutoImport] watching \(sources.count) source(s)")
+            debugLog("watching \(sources.count) source(s)")
         } catch {
             print("[AutoImport] reload failed: \(error)")
             fileWatcher.stopAll()
@@ -81,10 +82,11 @@ final class AutoImportService {
         from source: ImportSource,
         requireEnabledSince: Bool = true
     ) {
-        let filtered = urls.filter { isAutoImportCandidate($0, source: source, requireEnabledSince: requireEnabledSince) }
+        let filtered = urls.filter { isAutoImportCandidate($0, source: source, requireEnabledSince: requireEnabledSince, shouldLog: true) }
         guard !filtered.isEmpty else { return }
         for url in filtered {
             let key = url.standardizedFileURL.path
+            debugLog("detected file: \(key)")
             pendingTasks[key]?.cancel()
             pendingTasks[key] = Task { [weak self] in
                 await self?.debounceAndImport(url: url, source: source)
@@ -108,6 +110,7 @@ final class AutoImportService {
             return
         }
 
+        debugLog("importing file: \(url.path)")
         let result = await importService.importURLs([url])
         do {
             try importSourceRepository.updateLastScanned(uuid: source.uuid, date: Date())
@@ -116,8 +119,9 @@ final class AutoImportService {
         }
         pendingTasks.removeValue(forKey: key)
         if result.imported.isEmpty && result.duplicates > 0 && result.failures.isEmpty {
-            print("[AutoImport] duplicate skipped: \(url.lastPathComponent)")
+            debugLog("skipped duplicate: \(url.lastPathComponent)")
         }
+        debugLog("imported count: \(result.imported.count)")
         if let onResult {
             await MainActor.run {
                 onResult(AutoImportResult(source: source, importResult: result))
@@ -128,14 +132,27 @@ final class AutoImportService {
     private func isAutoImportCandidate(
         _ url: URL,
         source: ImportSource,
-        requireEnabledSince: Bool
+        requireEnabledSince: Bool,
+        shouldLog: Bool = false
     ) -> Bool {
         let standardized = url.standardizedFileURL
         let name = standardized.lastPathComponent
-        guard !name.hasPrefix(".") else { return false }
-        guard !name.hasSuffix(".tmp"), !name.hasSuffix(".download") else { return false }
-        guard AutoImportService.isSupportedImageURL(standardized) else { return false }
-        guard !isLibraryOrInsideLibrary(standardized) else { return false }
+        guard !name.hasPrefix(".") else {
+            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
+            return false
+        }
+        guard !name.hasSuffix(".tmp"), !name.hasSuffix(".download") else {
+            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
+            return false
+        }
+        guard AutoImportService.isSupportedImageURL(standardized) else {
+            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
+            return false
+        }
+        guard !isLibraryOrInsideLibrary(standardized) else {
+            if shouldLog { debugLog("ignored library file: \(standardized.path)") }
+            return false
+        }
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: standardized.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
             return false
@@ -181,6 +198,12 @@ final class AutoImportService {
         default:
             return false
         }
+    }
+
+    private func debugLog(_ message: String) {
+        #if DEBUG
+        print("[AutoImport] \(message)")
+        #endif
     }
 }
 

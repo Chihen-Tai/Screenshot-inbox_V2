@@ -59,14 +59,12 @@ struct MainToolbarView: ToolbarContent {
             }
             .help("View options")
 
-            if mode != .regular {
-                Button {
-                    inspectorVisible.toggle()
-                } label: {
-                    Label("Inspector", systemImage: "sidebar.right")
-                }
-                .help("Show inspector")
+            Button {
+                inspectorVisible.toggle()
+            } label: {
+                Label("Inspector", systemImage: inspectorVisible ? "sidebar.trailing" : "sidebar.right")
             }
+            .help(inspectorVisible ? "Hide inspector" : "Show inspector")
 
             Button {} label: {
                 Label("More", systemImage: "ellipsis.circle")

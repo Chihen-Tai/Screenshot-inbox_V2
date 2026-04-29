@@ -24,7 +24,6 @@ enum SidebarSelection: Hashable {
     case inbox, recent, favorites, untagged, trash
     case collection(String)
     case smart(SmartView)
-    case settings
 
     var displayTitle: String {
         switch self {
@@ -35,7 +34,6 @@ enum SidebarSelection: Hashable {
         case .trash: return "Trash"
         case .collection(let n): return n
         case .smart(let v): return v.title
-        case .settings: return "Settings"
         }
     }
 }

@@ -56,6 +56,11 @@ struct ActionsSectionView: View {
                         appState.router.moveToCollection([screenshot])
                     }
                     rowDivider
+                    ActionRow(title: "Export as PDF",
+                              systemImage: "doc.richtext") {
+                        appState.router.mergeIntoPDF([screenshot])
+                    }
+                    rowDivider
                     ActionRow(title: "Move to Trash",
                               systemImage: "trash",
                               isDestructive: true) {

@@ -1,9 +1,21 @@
 import Foundation
 
-/// Vision OCR output for a screenshot.
+enum OCRStatus: String, Hashable {
+    case pending
+    case processing
+    case complete
+    case failed
+    case skipped
+}
+
 struct OCRResult: Hashable {
-    let screenshotID: UUID
-    var text: String
-    var confidence: Double
-    // TODO: per-region observations with bounding boxes.
+    var id: Int?
+    var screenshotUUID: String
+    var text: String?
+    var language: String?
+    var confidence: Double?
+    var status: OCRStatus
+    var errorMessage: String?
+    var createdAt: Date
+    var updatedAt: Date?
 }

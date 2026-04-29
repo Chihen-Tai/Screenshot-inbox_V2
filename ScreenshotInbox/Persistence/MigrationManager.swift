@@ -160,4 +160,43 @@ extension Migration {
         try db.exec("CREATE INDEX IF NOT EXISTS idx_import_sources_folder_path ON import_sources(folder_path);")
         try db.exec("CREATE INDEX IF NOT EXISTS idx_import_sources_is_enabled ON import_sources(is_enabled);")
     }
+
+    static let ocrSchema = Migration(version: 4) { db in
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS ocr_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            screenshot_uuid TEXT NOT NULL UNIQUE,
+            text TEXT,
+            language TEXT,
+            confidence REAL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (screenshot_uuid) REFERENCES screenshots(uuid) ON DELETE CASCADE
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_ocr_results_screenshot_uuid ON ocr_results(screenshot_uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_ocr_results_status ON ocr_results(status);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_ocr_results_updated_at ON ocr_results(updated_at);")
+        // TODO: Add optional FTS5 screenshot_search table once index maintenance is ready.
+    }
+
+    static let detectedCodesSchema = Migration(version: 5) { db in
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS detected_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            screenshot_uuid TEXT NOT NULL,
+            symbology TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            is_url INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (screenshot_uuid) REFERENCES screenshots(uuid) ON DELETE CASCADE
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_detected_codes_screenshot_uuid ON detected_codes(screenshot_uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_detected_codes_symbology ON detected_codes(symbology);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_detected_codes_is_url ON detected_codes(is_url);")
+    }
 }

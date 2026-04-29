@@ -6,6 +6,7 @@ import AppKit
 /// thumbnail aspect and label rhythm stay consistent across column counts.
 final class ScreenshotCollectionViewLayout: NSCollectionViewFlowLayout {
     var targetItemWidth: CGFloat = Theme.Layout.Grid.targetItemWidth
+    private var lastDebugSummary: String = ""
     private var currentMinItem: CGFloat = Theme.Layout.Grid.minItemWidth
     private var currentMaxItem: CGFloat = Theme.Layout.Grid.maxItemWidth
     private var currentThumbAspect: CGFloat = Theme.Layout.Grid.thumbAspect
@@ -106,6 +107,13 @@ final class ScreenshotCollectionViewLayout: NSCollectionViewFlowLayout {
                     + currentLabelBottomInset
                 let h = thumbH + 2 * currentThumbInset + labelsBlock
                 self.itemSize = NSSize(width: w, height: h)
+                #if DEBUG
+                let summary = "bounds=\(Int(cv.bounds.width)) avail=\(Int(avail)) columns=\(Int(cols)) item=\(Int(w))x\(Int(h))"
+                if summary != lastDebugSummary {
+                    print("[GridLayout] \(summary)")
+                    lastDebugSummary = summary
+                }
+                #endif
             }
         }
         super.prepare()

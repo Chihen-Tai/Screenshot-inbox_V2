@@ -18,12 +18,14 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     let layoutMode: Theme.LayoutMode
     let thumbnailProvider: MacThumbnailProvider?
     let onClick: (UUID, NSEvent.ModifierFlags) -> Void
+    let onDoubleClick: (UUID) -> Void
     let onBackgroundClick: () -> Void
     let onSelectAll: () -> Void
     let onClear: () -> Void
     let onItemMenu: (UUID) -> NSMenu?
     let onEmptyAreaMenu: () -> NSMenu?
     let onFileDrop: ([URL], Int) -> Void
+    let onDragMissingFiles: (Int) -> Void
 
     func makeNSViewController(context: Context) -> ScreenshotCollectionViewController {
         let vc = ScreenshotCollectionViewController()
@@ -43,11 +45,13 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
 
     private func wireCallbacks(_ vc: ScreenshotCollectionViewController) {
         vc.onItemClick = onClick
+        vc.onItemDoubleClick = onDoubleClick
         vc.onBackgroundClick = onBackgroundClick
         vc.onSelectAll = onSelectAll
         vc.onClear = onClear
         vc.onItemMenu = onItemMenu
         vc.onEmptyAreaMenu = onEmptyAreaMenu
         vc.onFileDrop = onFileDrop
+        vc.onDragMissingFiles = onDragMissingFiles
     }
 }

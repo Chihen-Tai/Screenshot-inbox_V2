@@ -42,7 +42,7 @@ final class MacFileWatcherService: FileWatcherService {
                 }
                 watchers[source.folderPath] = watcher
                 watcher.start()
-                print("[FileWatcher] watching \(folderURL.path)")
+                debugLog("watching folder: \(folderURL.path)")
             } catch {
                 print("[FileWatcher] could not watch \(folderURL.path): \(error)")
             }
@@ -52,6 +52,12 @@ final class MacFileWatcherService: FileWatcherService {
     func stopAll() {
         for watcher in watchers.values { watcher.stop() }
         watchers.removeAll()
+    }
+
+    private func debugLog(_ message: String) {
+        #if DEBUG
+        print("[AutoImport] \(message)")
+        #endif
     }
 }
 

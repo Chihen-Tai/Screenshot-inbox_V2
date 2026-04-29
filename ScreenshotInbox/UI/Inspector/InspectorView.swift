@@ -75,6 +75,8 @@ struct InspectorView: View {
                 InspectorSeparator()
                 OCRSectionView(screenshot: shot)
                 InspectorSeparator()
+                DetectedCodesSectionView(screenshot: shot)
+                InspectorSeparator()
                 TagsSectionView(screenshot: shot)
                 InspectorSeparator()
                 ActionsSectionView(screenshot: shot)

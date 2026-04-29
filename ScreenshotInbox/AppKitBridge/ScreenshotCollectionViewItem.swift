@@ -48,6 +48,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     /// dispatch single / Cmd / Shift selection without going through
     /// NSCollectionView's modifier-blind delegate.
     var onClick: ((NSEvent.ModifierFlags) -> Void)?
+    var onDoubleClick: (() -> Void)?
     var onDrag: ((NSEvent) -> Void)?
 
     override func loadView() {
@@ -274,6 +275,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         super.prepareForReuse()
         isHovering = false
         onClick = nil
+        onDoubleClick = nil
         onDrag = nil
         thumbnailImageView.image = nil
         thumbnailImageView.isHidden = true
@@ -287,6 +289,9 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     override func mouseDown(with event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         onClick?(mods)
+        if event.clickCount == 2 {
+            onDoubleClick?()
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {

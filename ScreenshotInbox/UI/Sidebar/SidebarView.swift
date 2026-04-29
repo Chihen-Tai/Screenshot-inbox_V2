@@ -6,34 +6,36 @@ struct SidebarView: View {
     @State private var targetedDropSelection: SidebarSelection?
 
     var body: some View {
-        List(selection: $appState.sidebarSelection) {
-            Section {
-                ForEach(libraryItems) { item in
-                    sidebarRow(item)
+        VStack(spacing: 0) {
+            List(selection: $appState.sidebarSelection) {
+                Section {
+                    ForEach(libraryItems) { item in
+                        sidebarRow(item)
+                    }
+                } header: {
+                    SidebarSectionView(title: "Library")
                 }
-            } header: {
-                SidebarSectionView(title: "Library")
-            }
 
-            Section {
-                ForEach(collectionItems) { item in
-                    sidebarRow(item)
+                Section {
+                    ForEach(collectionItems) { item in
+                        sidebarRow(item)
+                    }
+                } header: {
+                    collectionsHeader
                 }
-            } header: {
-                collectionsHeader
-            }
 
-            Section {
-                ForEach(smartItems) { item in
-                    SidebarItemView(item: item)
+                Section {
+                    ForEach(smartItems) { item in
+                        SidebarItemView(item: item)
+                    }
+                } header: {
+                    SidebarSectionView(title: "Smart Collections")
                 }
-            } header: {
-                SidebarSectionView(title: "Smart Collections")
             }
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .frame(maxHeight: .infinity)
+
             settingsRow
         }
         .navigationSplitViewColumnWidth(
@@ -47,14 +49,17 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             Divider().opacity(0.35)
             Button {
-                appState.sidebarSelection = .settings
+                #if DEBUG
+                print("[Settings] sidebar settings clicked")
+                #endif
+                openSettingsPreservingSelection()
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: viewModel.settingsItem.systemImage)
+                    Image(systemName: viewModel.settingsAction.systemImage)
                         .font(.system(size: 13))
                         .frame(width: 20)
                         .foregroundStyle(Theme.SemanticColor.secondaryLabel)
-                    Text(viewModel.settingsItem.title)
+                    Text(viewModel.settingsAction.title)
                         .font(.system(size: 12.5))
                         .foregroundStyle(Theme.SemanticColor.label)
                     Spacer(minLength: 0)
@@ -64,14 +69,34 @@ struct SidebarView: View {
                 .contentShape(Rectangle())
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(appState.sidebarSelection == .settings
-                              ? Theme.Palette.selectionFill
-                              : .clear)
+                        .fill(.clear)
                         .padding(.horizontal, Theme.Layout.sidebarHorizontalInset)
                 )
             }
             .buttonStyle(.plain)
             .padding(.vertical, 6)
+        }
+        .background(.regularMaterial)
+    }
+
+    private func openSettingsPreservingSelection() {
+        let preservedSelection = appState.sidebarSelection
+        SettingsWindowOpener.open(appState: appState)
+        if appState.sidebarSelection != preservedSelection {
+            #if DEBUG
+            print("[BUG] Settings should not load screenshots")
+            print("[Settings] restoring destination after unexpected change: \(preservedSelection?.displayTitle ?? "nil")")
+            #endif
+            appState.sidebarSelection = preservedSelection
+        }
+        DispatchQueue.main.async {
+            if appState.sidebarSelection != preservedSelection {
+                #if DEBUG
+                print("[BUG] Settings should not load screenshots")
+                print("[Settings] restoring deferred destination: \(preservedSelection?.displayTitle ?? "nil")")
+                #endif
+                appState.sidebarSelection = preservedSelection
+            }
         }
     }
 

@@ -104,30 +104,60 @@ final class ScreenshotActionRouter {
                            kind: .comingSoon)
     }
 
-    /// Mock-OCR copy: dumps each selected screenshot's mock `ocrSnippets` onto
-    /// the system pasteboard so the action gives real, observable feedback even
-    /// though no real OCR is wired yet.
     func copyOCRText(_ shots: [Screenshot]) {
         log("copyOCRText", shots)
-        let blocks = shots.map { shot in
-            shot.ocrSnippets.joined(separator: "\n")
+        let complete = shots.filter { $0.isOCRComplete && !$0.ocrSnippets.isEmpty }
+        guard !complete.isEmpty else {
+            appState.showToast("OCR text is not available yet", kind: .info)
+            return
+        }
+        let blocks = complete.map { shot in
+            let text = shot.ocrSnippets.joined(separator: "\n")
+            return complete.count == 1 ? text : "\(shot.name)\n\(text)"
         }
         let payload = blocks.joined(separator: "\n\n")
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(payload, forType: .string)
-        let n = shots.count
+        let n = complete.count
         let suffix = n == 1 ? "" : "s"
         appState.showToast("Copied OCR text from \(n) screenshot\(suffix)",
                            kind: .success)
     }
 
+    func rerunOCR(_ shots: [Screenshot]) {
+        log("rerunOCR", shots)
+        appState.rerunOCR(for: shots)
+    }
+
+    func openDetectedLink(_ shots: [Screenshot]) {
+        log("openDetectedLink", shots)
+        guard let shot = shots.first,
+              let code = appState.detectedCodes(for: shot).first(where: \.isURL) else {
+            appState.showToast("No detected link", kind: .info)
+            return
+        }
+        appState.openDetectedCode(code)
+    }
+
+    func copyDetectedLink(_ shots: [Screenshot]) {
+        log("copyDetectedLink", shots)
+        guard let shot = shots.first,
+              let code = appState.detectedCodes(for: shot).first else {
+            appState.showToast("No detected code", kind: .info)
+            return
+        }
+        appState.copyDetectedCode(code)
+    }
+
+    func rerunCodeDetection(_ shots: [Screenshot]) {
+        log("rerunCodeDetection", shots)
+        appState.rerunCodeDetection(for: shots)
+    }
+
     func mergeIntoPDF(_ shots: [Screenshot]) {
         log("mergeIntoPDF", shots)
-        let n = shots.count
-        let suffix = n == 1 ? "" : "s"
-        appState.showToast("Merge \(n) screenshot\(suffix) into PDF is coming in a later phase",
-                           kind: .comingSoon)
+        appState.beginPDFExport(shots)
     }
 
     func moveToTrash(_ shots: [Screenshot]) {

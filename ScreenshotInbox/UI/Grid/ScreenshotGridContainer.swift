@@ -28,6 +28,7 @@ struct ScreenshotGridContainer: View {
                 layoutMode: appState.layoutMode,
                 thumbnailProvider: appState.thumbnailProvider,
                 onClick: handleClick,
+                onDoubleClick: handleDoubleClick,
                 onBackgroundClick: {
                     print("[GridContainer] background click — clear")
                     appState.clearScreenshotSelection()
@@ -54,9 +55,23 @@ struct ScreenshotGridContainer: View {
                             unsupportedCount: unsupportedCount
                         )
                     }
+                },
+                onDragMissingFiles: { missingCount in
+                    appState.showToast(
+                        missingCount == 1
+                        ? "1 file could not be dragged because it was missing"
+                        : "\(missingCount) files could not be dragged because they were missing",
+                        kind: .info
+                    )
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay {
+                if appState.filteredScreenshots.isEmpty && !appState.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ContentUnavailableView("No matching screenshots", systemImage: "magnifyingglass")
+                        .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                }
+            }
 
             Divider().opacity(0.4)
             #if DEBUG
@@ -124,6 +139,12 @@ struct ScreenshotGridContainer: View {
         } else {
             appState.selection.replace(with: id)
         }
+    }
+
+    private func handleDoubleClick(_ id: UUID) {
+        appState.selection.replace(with: id)
+        guard let shot = appState.screenshots(for: [id]).first else { return }
+        appState.router.open([shot])
     }
 
     private var footer: some View {

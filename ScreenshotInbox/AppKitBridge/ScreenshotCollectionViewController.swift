@@ -21,6 +21,7 @@ final class ScreenshotCollectionViewController: NSViewController {
     /// Click callback. The container resolves modifier flags to the right
     /// SelectionController call (replace / toggle / extendRange).
     var onItemClick: ((UUID, NSEvent.ModifierFlags) -> Void)?
+    var onItemDoubleClick: ((UUID) -> Void)?
     /// Background click (empty grid area) clears selection.
     var onBackgroundClick: (() -> Void)?
     /// Cmd-A — fired by AppKit's standard `selectAll(_:)` action and the
@@ -36,6 +37,7 @@ final class ScreenshotCollectionViewController: NSViewController {
     var onEmptyAreaMenu: (() -> NSMenu?)?
     /// Phase 6.5 — Finder/Desktop files dropped into the grid.
     var onFileDrop: (([URL], Int) -> Void)?
+    var onDragMissingFiles: ((Int) -> Void)?
     var thumbnailProvider: MacThumbnailProvider?
 
     private let layout = ScreenshotCollectionViewLayout()
@@ -132,6 +134,9 @@ final class ScreenshotCollectionViewController: NSViewController {
         let w = view.bounds.width
         if abs(w - lastLaidOutWidth) > 0.5 {
             lastLaidOutWidth = w
+            #if DEBUG
+            print("[GridLayout] host bounds width=\(Int(w))")
+            #endif
             collectionView?.collectionViewLayout?.invalidateLayout()
         }
     }
@@ -145,6 +150,20 @@ final class ScreenshotCollectionViewController: NSViewController {
             self.screenshots = screenshots
             self.screenshotIDs = newIDs
             collectionView?.reloadData()
+        } else {
+            let changedPaths = screenshots.indices.compactMap { index -> IndexPath? in
+                guard index < self.screenshots.count, screenshots[index] != self.screenshots[index] else {
+                    return nil
+                }
+                return IndexPath(item: index, section: 0)
+            }
+            if !changedPaths.isEmpty {
+                self.screenshots = screenshots
+                collectionView?.reloadItems(at: Set(changedPaths))
+                #if DEBUG
+                print("[Rename] collection item reloaded: \(changedPaths.map(\.item))")
+                #endif
+            }
         }
         if needsReload || selectedIDs != currentSelectedIDs {
             currentSelectedIDs = selectedIDs
@@ -188,31 +207,75 @@ final class ScreenshotCollectionViewController: NSViewController {
         onItemClick?(id, modifiers)
     }
 
+    fileprivate func dispatchDoubleClick(at indexPath: IndexPath) {
+        guard indexPath.item < screenshots.count else { return }
+        let screenshot = screenshots[indexPath.item]
+        #if DEBUG
+        print("[DoubleClick] item index=\(indexPath.item)")
+        print("[DoubleClick] screenshot uuid=\(screenshot.uuidString)")
+        if let libraryPath = screenshot.libraryPath {
+            print("[DoubleClick] opening path=\(libraryPath)")
+        }
+        #endif
+        onItemDoubleClick?(screenshot.id)
+    }
+
     fileprivate func beginInternalDrag(from item: ScreenshotCollectionViewItem, event: NSEvent) {
         guard !isInternalDragActive else { return }
         guard let indexPath = collectionView.indexPath(for: item),
               indexPath.item < screenshots.count else { return }
         let clickedID = screenshots[indexPath.item].id
-        let ids = pendingDragIDs.isEmpty ? [clickedID] : pendingDragIDs
+        let initialSelection = currentSelectedIDs
+        let sourceWasSelected = initialSelection.contains(clickedID)
+        let ids = sourceWasSelected
+            ? screenshotIDs.filter { initialSelection.contains($0) }
+            : [clickedID]
         guard !ids.isEmpty else { return }
+        if !sourceWasSelected {
+            currentSelectedIDs = [clickedID]
+            applyExternalSelection([clickedID])
+            onItemClick?(clickedID, [])
+        }
+        #if DEBUG
+        print("[Drag] start index: \(indexPath.item)")
+        print("[Drag] initial selection count: \(initialSelection.count)")
+        print("[Drag] normalized selection count: \(ids.count)")
+        print("[Drag] single item drag: \(ids.count == 1)")
+        #endif
         print("[DragSource] started item index=\(indexPath.item) uuid=\(clickedID.uuidString)")
         print("[DragSource] dragged IDs: \(ids.map(\.uuidString))")
         print("[DragSource] writing pasteboard type: \(InternalScreenshotDrag.pasteboardTypeString)")
 
-        let pasteboardItem = NSPasteboardItem()
-        pasteboardItem.setString(
-            InternalScreenshotDrag.encode(ids),
-            forType: InternalScreenshotDrag.pasteboardType
-        )
-        print("[DragSource] pasteboard item types after writing: \(pasteboardItem.types.map(\.rawValue))")
-        let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
         let itemFrameInCollection = item.view.convert(item.view.bounds, to: collectionView)
-        draggingItem.setDraggingFrame(
+            .integral
+        #if DEBUG
+        print("[Drag] preview frame: x=\(Int(itemFrameInCollection.origin.x)) y=\(Int(itemFrameInCollection.origin.y)) w=\(Int(itemFrameInCollection.width)) h=\(Int(itemFrameInCollection.height))")
+        #endif
+        let fileURLs = managedFileURLs(for: ids)
+        let primaryURL = managedFileURL(for: clickedID) ?? fileURLs.urls.first
+        let pasteboardItem = dragPasteboardItem(ids: ids, fileURL: primaryURL)
+        print("[DragSource] primary pasteboard types after writing: \(pasteboardItem.types.map(\.rawValue))")
+        print("[DragSource] external file URL count: \(fileURLs.urls.count)")
+        print("[DragSource] internal ID count: \(ids.count)")
+
+        let internalDraggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+        internalDraggingItem.setDraggingFrame(
             itemFrameInCollection,
             contents: dragImage(for: item, count: ids.count)
         )
+        var draggingItems = [internalDraggingItem]
+        for url in fileURLs.urls where url != primaryURL {
+            let fileItem = NSDraggingItem(pasteboardWriter: dragPasteboardItem(ids: ids, fileURL: url))
+            fileItem.setDraggingFrame(NSRect(origin: itemFrameInCollection.origin, size: .zero), contents: nil)
+            draggingItems.append(fileItem)
+        }
+        if fileURLs.missingCount > 0 {
+            print("[DragSource] missing managed files for external drag: \(fileURLs.missingCount)")
+            onDragMissingFiles?(fileURLs.missingCount)
+        }
+        print("[DragSource] file URLs: \(fileURLs.urls.map(\.path))")
         isInternalDragActive = true
-        collectionView.beginDraggingSession(with: [draggingItem], event: event, source: collectionView)
+        collectionView.beginDraggingSession(with: draggingItems, event: event, source: collectionView)
     }
 
     fileprivate func endInternalDrag() {
@@ -256,6 +319,49 @@ final class ScreenshotCollectionViewController: NSViewController {
         image.unlockFocus()
         return image
     }
+
+    private func managedFileURLs(for ids: [UUID]) -> (urls: [URL], missingCount: Int) {
+        var urls: [URL] = []
+        var missing = 0
+        let fileManager = FileManager.default
+        for id in ids {
+            guard let screenshot = screenshots.first(where: { $0.id == id }),
+                  let url = thumbnailProvider?.originalURL(for: screenshot) else {
+                missing += 1
+                continue
+            }
+            let exists = fileManager.fileExists(atPath: url.path)
+            print("[DragSource] libraryPath exists: \(exists) path=\(url.path)")
+            guard exists else {
+                missing += 1
+                continue
+            }
+            urls.append(url)
+        }
+        return (urls, missing)
+    }
+
+    private func managedFileURL(for id: UUID) -> URL? {
+        guard let screenshot = screenshots.first(where: { $0.id == id }),
+              let url = thumbnailProvider?.originalURL(for: screenshot),
+              FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+        return url
+    }
+
+    private func dragPasteboardItem(ids: [UUID], fileURL: URL?) -> NSPasteboardItem {
+        let item = NSPasteboardItem()
+        item.setString(
+            InternalScreenshotDrag.encode(ids),
+            forType: InternalScreenshotDrag.pasteboardType
+        )
+        if let fileURL {
+            item.setString(fileURL.absoluteString, forType: .fileURL)
+            item.setString(fileURL.path, forType: NSPasteboard.PasteboardType("public.utf8-plain-text"))
+        }
+        return item
+    }
 }
 
 // MARK: - DataSource
@@ -285,6 +391,11 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
             guard let self, let item,
                   let path = self.collectionView.indexPath(for: item) else { return }
             self.dispatchClick(at: path, modifiers: mods)
+        }
+        item.onDoubleClick = { [weak self, weak item] in
+            guard let self, let item,
+                  let path = self.collectionView.indexPath(for: item) else { return }
+            self.dispatchDoubleClick(at: path)
         }
         item.onDrag = { [weak self, weak item] event in
             guard let self, let item else { return }
@@ -359,7 +470,7 @@ final class ScreenshotGridCollectionView: NSCollectionView {
 
     override func draggingSession(_ session: NSDraggingSession,
                                   sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        .move
+        context == .outsideApplication ? .copy : [.copy, .move]
     }
 
     override func draggingSession(_ session: NSDraggingSession,
@@ -409,7 +520,10 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     }
 
     private func acceptedDrop(from sender: NSDraggingInfo) -> DragDropController.FileDrop {
-        DragDropController.readFileDrop(from: sender.draggingPasteboard)
+        if sender.draggingPasteboard.availableType(from: [InternalScreenshotDrag.pasteboardType]) != nil {
+            return DragDropController.FileDrop(supported: [], unsupportedCount: 0)
+        }
+        return DragDropController.readFileDrop(from: sender.draggingPasteboard)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {

@@ -1,18 +1,60 @@
 import SwiftUI
 
 struct OCRSectionView: View {
+    @EnvironmentObject private var appState: AppState
     let screenshot: Screenshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "OCR Snippets")
+            HStack {
+                SectionHeader(title: "OCR")
+                Spacer(minLength: 0)
+                Button {
+                    appState.router.copyOCRText([screenshot])
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10.5, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .help("Copy OCR Text")
+                Button {
+                    appState.router.rerunOCR([screenshot])
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10.5, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .help("Re-run OCR")
+            }
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch appState.ocrResult(for: screenshot)?.status {
+        case .pending:
+            statusText("OCR pending")
+        case .processing:
+            statusText("Recognizing text...")
+        case .failed:
+            VStack(alignment: .leading, spacing: 5) {
+                statusText("OCR failed")
+                if let message = appState.ocrResult(for: screenshot)?.errorMessage {
+                    Text(message)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.SemanticColor.tertiaryLabel)
+                        .lineLimit(3)
+                    }
+            }
+        case .skipped:
+            statusText("OCR skipped")
+        case .complete:
             if screenshot.ocrSnippets.isEmpty {
-                Text(screenshot.isOCRComplete ? "No text detected" : "OCR not available yet")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                statusText("No text detected")
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(screenshot.ocrSnippets.enumerated()), id: \.offset) { _, snippet in
+                    ForEach(Array(screenshot.ocrSnippets.prefix(8).enumerated()), id: \.offset) { _, snippet in
                         HStack(alignment: .top, spacing: 9) {
                             Rectangle()
                                 .fill(Theme.SemanticColor.divider.opacity(0.55))
@@ -26,8 +68,21 @@ struct OCRSectionView: View {
                                 .padding(.vertical, 1)
                         }
                     }
+                    if screenshot.ocrSnippets.count > 8 {
+                        Text("\(screenshot.ocrSnippets.count - 8) more lines")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.SemanticColor.tertiaryLabel)
+                    }
                 }
             }
+        case nil:
+            statusText("OCR not queued yet")
         }
+    }
+
+    private func statusText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.SemanticColor.secondaryLabel)
     }
 }

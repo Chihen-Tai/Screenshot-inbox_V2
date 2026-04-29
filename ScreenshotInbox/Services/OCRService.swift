@@ -1,7 +1,15 @@
 import Foundation
 
-/// Apple Vision OCR pipeline.
-final class OCRService {
-    // TODO: VNRecognizeTextRequest with concurrency limits and persistence.
-    init() {}
+struct OCRRecognitionResult {
+    var text: String
+    var language: String?
+    var confidence: Double?
+}
+
+protocol OCRService {
+    func recognizeText(for screenshot: Screenshot) async throws -> OCRRecognitionResult
+}
+
+enum OCRServiceError: Error {
+    case missingImage
 }

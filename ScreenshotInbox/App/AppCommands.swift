@@ -17,6 +17,13 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) { }
 
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                SettingsWindowOpener.open(appState: appState)
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+        }
+
         CommandGroup(replacing: .pasteboard) {
             Button("Cut") {
                 NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
@@ -44,6 +51,13 @@ struct AppCommands: Commands {
                 appState.selectAllVisibleScreenshots()
             }
             .keyboardShortcut("a", modifiers: [.command])
+        }
+
+        CommandGroup(after: .toolbar) {
+            Button(appState.inspectorOverrideVisible ? "Hide Inspector" : "Show Inspector") {
+                appState.inspectorOverrideVisible.toggle()
+            }
+            .keyboardShortcut("i", modifiers: [.command, .option])
         }
     }
 }

@@ -40,18 +40,25 @@ enum Theme {
         static let mediumBreakpoint: CGFloat = 800
 
         // MARK: Sidebar — fixed-ish, never grows to fill window
-        static let sidebarMin: CGFloat = 200
+        static let sidebarMin: CGFloat = 180
         static let sidebarIdeal: CGFloat = 220
-        static let sidebarMax: CGFloat = 240
+        static let sidebarMax: CGFloat = 320
 
         // MARK: Inspector — fixed-ish, pinned right, never grows to fill window
-        static let inspectorMin: CGFloat = 300
+        static let inspectorMin: CGFloat = 260
         static let inspectorIdeal: CGFloat = 320
-        static let inspectorMax: CGFloat = 360
+        static let inspectorMax: CGFloat = 420
 
         // MARK: Grid column (center) — the only flexible pane
         static let gridContentMin: CGFloat = 620
         static let gridContentIdeal: CGFloat = 800
+        static let gridUsableMinRegular: CGFloat = 520
+        static let gridUsableMinMedium: CGFloat = 500
+        static let gridUsableMinCompact: CGFloat = 420
+
+        // MARK: Split dividers
+        static let splitDividerWidth: CGFloat = 8
+        static let splitDividerVisibleWidth: CGFloat = 1
 
         // MARK: Inspector internals
         static let inspectorPadding: CGFloat = 22

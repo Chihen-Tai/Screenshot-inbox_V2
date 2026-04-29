@@ -61,9 +61,22 @@ final class ContextMenuController {
                 key: .copyImage)
             add(menu, title: n > 1 ? "Copy OCR Text from \(n) Screenshots" : "Copy OCR Text",
                 key: .copyOCRText)
-            if n > 1 {
-                add(menu, title: "Merge \(n) Screenshots into PDF", key: .mergeIntoPDF)
+            add(menu, title: n > 1 ? "Re-run OCR for \(n) Screenshots" : "Re-run OCR",
+                key: .rerunOCR)
+            if n == 1 {
+                let codes = targets.first.map { appState.detectedCodes(for: $0) } ?? []
+                if codes.contains(where: \.isURL) {
+                    add(menu, title: "Open Detected Link", key: .openDetectedLink)
+                }
+                if !codes.isEmpty {
+                    add(menu, title: codes.first?.isURL == true ? "Copy Detected Link" : "Copy Detected Text",
+                        key: .copyDetectedLink)
+                }
             }
+            add(menu, title: n > 1 ? "Re-detect Codes for \(n) Screenshots" : "Re-detect Codes",
+                key: .rerunCodeDetection)
+            add(menu, title: n > 1 ? "Merge \(n) Screenshots into PDF" : "Export as PDF",
+                key: .mergeIntoPDF)
             menu.addItem(.separator())
 
             add(menu,
@@ -137,6 +150,10 @@ private enum MenuActionKey: String {
     case moveToCollection
     case copyImage
     case copyOCRText
+    case rerunOCR
+    case openDetectedLink
+    case copyDetectedLink
+    case rerunCodeDetection
     case mergeIntoPDF
     case moveToTrash
     case toggleFavorite
@@ -182,6 +199,10 @@ private final class MenuActionInvoker: NSObject {
         case .moveToCollection:  router.moveToCollection(targets)
         case .copyImage:         router.copyImage(targets)
         case .copyOCRText:       router.copyOCRText(targets)
+        case .rerunOCR:          router.rerunOCR(targets)
+        case .openDetectedLink:  router.openDetectedLink(targets)
+        case .copyDetectedLink:  router.copyDetectedLink(targets)
+        case .rerunCodeDetection: router.rerunCodeDetection(targets)
         case .mergeIntoPDF:      router.mergeIntoPDF(targets)
         case .moveToTrash:       router.moveToTrash(targets)
         case .toggleFavorite:    router.toggleFavorite(targets)
