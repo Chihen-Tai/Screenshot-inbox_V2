@@ -9,22 +9,22 @@ Screenshot Inbox helps keep screenshots out of scattered folders by importing th
 ## Screenshots
 
 
-Main window
+### Main window
 
-- Add screenshot: docs/images/main.png
+![Main window](docs/images/main.png)
 
-OCR and search
+### OCR and search
 
-- Add screenshot: docs/images/qrocr.png
-- Add screenshot: docs/images/search.png
+![OCR and QR](docs/images/qrocr.png)
+![Search](docs/images/search.png)
 
-PDF export
+### PDF export
 
-- Add screenshot: docs/images/pdf.png
+![PDF export](docs/images/pdf.png)
 
-Settings
+### Settings
 
-- Add screenshot: docs/images/setting.png
+![Settings](docs/images/setting.png)
 
 
 <!-- Add screenshot: docs/images/main-window.png -->
