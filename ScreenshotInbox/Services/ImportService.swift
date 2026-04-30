@@ -105,9 +105,11 @@ final class ImportService: ScreenshotImporting {
         let largeThumbnailURL = library.largeThumbnailURL(for: uuid)
         do {
             try thumbnailService.writeThumbnails(from: destURL, uuid: uuid)
+            #if DEBUG
             let fm = FileManager.default
             print("[Import] small thumbnail: \(smallThumbnailURL.path) exists=\(fm.fileExists(atPath: smallThumbnailURL.path))")
             print("[Import] large thumbnail: \(largeThumbnailURL.path) exists=\(fm.fileExists(atPath: largeThumbnailURL.path))")
+            #endif
         } catch {
             print("[Import] thumbnail generation failed for \(destURL.lastPathComponent): \(error)")
         }

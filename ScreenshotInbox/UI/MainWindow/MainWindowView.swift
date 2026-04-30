@@ -8,6 +8,7 @@ import AppKit
 ///   bar without competing with the section title.
 struct MainWindowView: View {
     @EnvironmentObject private var appState: AppState
+    @AppStorage(FirstRunOnboarding.preferenceKey) private var hasSeenOnboarding = false
 
     var body: some View {
         MainSplitView()
@@ -134,6 +135,17 @@ struct MainWindowView: View {
                 PDFExportSheet()
                     .environmentObject(appState)
             }
+            .sheet(isPresented: onboardingBinding) {
+                FirstRunOnboardingView(
+                    onContinue: {
+                        hasSeenOnboarding = true
+                    },
+                    onOpenSettings: {
+                        hasSeenOnboarding = true
+                        SettingsWindowOpener.open(appState: appState)
+                    }
+                )
+            }
             // Phase 5 — bottom-trailing transient banner.
             .overlay(alignment: .bottomTrailing) {
                 if let toast = appState.toast {
@@ -180,6 +192,17 @@ struct MainWindowView: View {
     private var itemCountText: String {
         let n = appState.filteredScreenshots.count
         return n == 1 ? "1 item" : "\(n) items"
+    }
+
+    private var onboardingBinding: Binding<Bool> {
+        Binding(
+            get: { !hasSeenOnboarding },
+            set: { isPresented in
+                if !isPresented {
+                    hasSeenOnboarding = true
+                }
+            }
+        )
     }
 
     private var deleteCollectionBinding: Binding<Bool> {

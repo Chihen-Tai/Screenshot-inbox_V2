@@ -71,6 +71,24 @@ swift run ScreenshotInbox
 
 The project is a Swift Package Manager executable target, not an Xcode project. If you prefer Xcode, open `Package.swift`.
 
+## Release Builds
+
+The current pre-release version is `0.1.0-alpha` with build `1`.
+
+Create a local release app bundle:
+
+```bash
+scripts/build-release.sh
+```
+
+Create a ZIP package:
+
+```bash
+scripts/package-zip.sh
+```
+
+Release packaging, signing, notarization, and manual QA steps are documented in `docs/RELEASE.md`.
+
 ## Usage
 
 1. Import screenshots manually, or enable watched folders for auto import.
@@ -103,7 +121,9 @@ See `ARCHITECTURE.md` for more detail.
 
 ## Privacy
 
-Screenshot Inbox is local-first. Screenshots are stored in a local managed library on your Mac. OCR and QR detection run locally using Apple frameworks. No account is required. No cloud upload is required. The app does not sell or transmit user data.
+Screenshot Inbox is local-first. It does not upload your screenshots or OCR text to any server.
+
+Screenshots are stored in a local managed library on your Mac. OCR and QR detection run locally using Apple frameworks. No account is required, no telemetry or network services are included, and watched folders are limited to the folders configured in Settings. Import, rename, trash, and delete workflows operate on managed Screenshot Inbox copies by default, not the original source files on your Desktop, Downloads, or other folders.
 
 See `PRIVACY.md` for details.
 

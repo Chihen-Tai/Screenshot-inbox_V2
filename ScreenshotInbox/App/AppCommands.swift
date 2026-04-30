@@ -17,6 +17,30 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) { }
 
+        CommandGroup(replacing: .appInfo) {
+            Button("About \(AppReleaseInfo.name)") {
+                let credits = NSMutableAttributedString(
+                    string: """
+                    \(AppReleaseInfo.shortDescription)
+
+                    \(AppReleaseInfo.privacyNote)
+                    License: \(AppReleaseInfo.license)
+                    \(AppReleaseInfo.copyright)
+                    GitHub: \(AppReleaseInfo.repositoryPlaceholder)
+                    """,
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+                    ]
+                )
+                NSApplication.shared.orderFrontStandardAboutPanel(options: [
+                    .applicationName: AppReleaseInfo.name,
+                    .applicationVersion: AppReleaseInfo.version,
+                    .version: AppReleaseInfo.build,
+                    .credits: credits
+                ])
+            }
+        }
+
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
                 SettingsWindowOpener.open(appState: appState)

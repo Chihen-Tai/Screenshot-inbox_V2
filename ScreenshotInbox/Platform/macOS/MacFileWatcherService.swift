@@ -27,7 +27,9 @@ final class MacFileWatcherService: FileWatcherService {
             let folderURL = URL(fileURLWithPath: source.folderPath, isDirectory: true)
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: folderURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+                #if DEBUG
                 print("[FileWatcher] missing folder: \(folderURL.path)")
+                #endif
                 continue
             }
             do {
@@ -44,7 +46,9 @@ final class MacFileWatcherService: FileWatcherService {
                 watcher.start()
                 debugLog("watching folder: \(folderURL.path)")
             } catch {
+                #if DEBUG
                 print("[FileWatcher] could not watch \(folderURL.path): \(error)")
+                #endif
             }
         }
     }

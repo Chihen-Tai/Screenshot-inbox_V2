@@ -121,6 +121,7 @@ final class AppState: ObservableObject {
     private(set) var pdfExportService: PDFExporting
     private(set) var exportShareService: ExportShareService
     private(set) var libraryIntegrityService: LibraryIntegrityService
+    private(set) var folderAccessService: FolderAccessService
     private(set) var thumbnailProvider: MacThumbnailProvider
     private(set) var fileActionService: MacFileActionService
     /// Legacy demo-mode flag. Runtime no longer seeds mock screenshots when
@@ -191,7 +192,9 @@ final class AppState: ObservableObject {
                 displayName: url.lastPathComponent,
                 recursive: false
             )
+            #if DEBUG
             print("[AutoImport] development default source added: \(path)")
+            #endif
         }
     }
     #endif
@@ -287,7 +290,9 @@ final class AppState: ObservableObject {
             detectedCodeRepository = codesRepo
             imageHashRepository = imageHashesRepo
             organizationRuleRepository = rulesRepo
+            #if DEBUG
             print("[AppState] persistence ok: rows=\(loaded.count) at \(library.databaseURL.path)")
+            #endif
         } catch {
             print("[AppState] persistence bootstrap failed — falling back to mocks: \(error)")
         }
@@ -345,6 +350,7 @@ final class AppState: ObservableObject {
         self.imageHashingService = MacImageHashingService()
         self.pdfExportService = MacPDFExportService(library: library)
         self.exportShareService = ExportShareService(libraryRootURL: library.libraryRootURL)
+        self.folderAccessService = FolderAccessService()
         self.libraryIntegrityService = LibraryIntegrityService(
             library: library,
             screenshotRepository: repository,
@@ -1268,9 +1274,14 @@ final class AppState: ObservableObject {
     }
 
     func addImportSource(folderURL: URL) {
-        let standardized = folderURL.standardizedFileURL
+        let access = folderAccessService.resolveAccess(for: folderURL)
+        let standardized = access.url
         guard !isInsideLibrary(standardized) else {
             showToast("The library folder cannot be watched", kind: .info)
+            return
+        }
+        guard folderAccessService.validateReadableFolder(standardized) else {
+            showToast(folderAccessService.accessFailureMessage(for: standardized), kind: .info)
             return
         }
         do {
@@ -1303,6 +1314,16 @@ final class AppState: ObservableObject {
 
     func revealLibraryInFinder() {
         NSWorkspace.shared.activateFileViewerSelecting([library.libraryRootURL])
+    }
+
+    func openPrivacyDocument() {
+        let localURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("PRIVACY.md")
+        if FileManager.default.fileExists(atPath: localURL.path) {
+            NSWorkspace.shared.open(localURL)
+            return
+        }
+        showToast("Privacy document is included as PRIVACY.md in the project repository", kind: .info)
     }
 
     func resetLayoutPreferences() {
@@ -1853,7 +1874,7 @@ final class AppState: ObservableObject {
 
     var permanentDeleteAlertMessage: String {
         let n = permanentDeleteTargetCount
-        return "\(n) screenshot\(n == 1 ? "" : "s") will be permanently deleted from Screenshot Inbox. This cannot be undone."
+        return "\(n) managed Screenshot Inbox cop\(n == 1 ? "y" : "ies") will be permanently deleted. Original source files outside the managed library are not deleted. This cannot be undone."
     }
 
     var permanentDeleteConfirmButtonTitle: String {
@@ -1873,7 +1894,9 @@ final class AppState: ObservableObject {
             if isManagedLibraryURL(originalURL) {
                 urls.append(originalURL)
             } else {
+                #if DEBUG
                 print("[AppState] skip deleting non-library original path=\(originalURL.path)")
+                #endif
             }
         }
         for url in urls {
@@ -1881,7 +1904,9 @@ final class AppState: ObservableObject {
             do {
                 try fileManager.removeItem(at: url)
             } catch {
+                #if DEBUG
                 print("[AppState] managed file delete failed path=\(url.path) error=\(error)")
+                #endif
             }
         }
     }

@@ -61,6 +61,8 @@ final class MacLibraryService: LibraryManaging {
         for folder in folders {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         }
+        #if DEBUG
         print("[Library] bootstrap ok: \(libraryRootURL.path)")
+        #endif
     }
 }

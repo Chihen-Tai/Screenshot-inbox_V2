@@ -260,9 +260,11 @@ final class ScreenshotCollectionViewController: NSViewController {
         print("[Drag] normalized selection count: \(ids.count)")
         print("[Drag] single item drag: \(ids.count == 1)")
         #endif
+        #if DEBUG
         print("[DragSource] started item index=\(indexPath.item) uuid=\(clickedID.uuidString)")
         print("[DragSource] dragged IDs: \(ids.map(\.uuidString))")
         print("[DragSource] writing pasteboard type: \(InternalScreenshotDrag.pasteboardTypeString)")
+        #endif
 
         let itemFrameInCollection = item.view.convert(item.view.bounds, to: collectionView)
             .integral
@@ -272,9 +274,11 @@ final class ScreenshotCollectionViewController: NSViewController {
         let fileURLs = managedFileURLs(for: ids)
         let primaryURL = managedFileURL(for: clickedID) ?? fileURLs.urls.first
         let pasteboardItem = dragPasteboardItem(ids: ids, fileURL: primaryURL)
+        #if DEBUG
         print("[DragSource] primary pasteboard types after writing: \(pasteboardItem.types.map(\.rawValue))")
         print("[DragSource] external file URL count: \(fileURLs.urls.count)")
         print("[DragSource] internal ID count: \(ids.count)")
+        #endif
 
         let internalDraggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
         internalDraggingItem.setDraggingFrame(
@@ -288,10 +292,14 @@ final class ScreenshotCollectionViewController: NSViewController {
             draggingItems.append(fileItem)
         }
         if fileURLs.missingCount > 0 {
+            #if DEBUG
             print("[DragSource] missing managed files for external drag: \(fileURLs.missingCount)")
+            #endif
             onDragMissingFiles?(fileURLs.missingCount)
         }
+        #if DEBUG
         print("[DragSource] file URLs: \(fileURLs.urls.map(\.path))")
+        #endif
         isInternalDragActive = true
         collectionView.beginDraggingSession(with: draggingItems, event: event, source: collectionView)
     }
@@ -349,7 +357,9 @@ final class ScreenshotCollectionViewController: NSViewController {
                 continue
             }
             let exists = fileManager.fileExists(atPath: url.path)
+            #if DEBUG
             print("[DragSource] libraryPath exists: \(exists) path=\(url.path)")
+            #endif
             guard exists else {
                 missing += 1
                 continue

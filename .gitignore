@@ -38,6 +38,7 @@ Originals/
 *.pid
 
 # Generated exports and debug output
+dist/
 *.pdf
 PDFExportDebug/
 Exports/

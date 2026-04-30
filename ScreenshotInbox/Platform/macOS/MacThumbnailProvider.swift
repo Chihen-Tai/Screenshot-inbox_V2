@@ -38,19 +38,29 @@ final class MacThumbnailProvider {
 
     func loadThumbnail(for screenshot: Screenshot, tier: Tier) -> NSImage? {
         guard let url = thumbnailURL(for: screenshot, tier: tier) else {
+            #if DEBUG
             print("[ThumbnailProvider] no real thumbnail path for mock row: \(screenshot.name)")
+            #endif
             return nil
         }
+        #if DEBUG
         print("[ThumbnailProvider] using \(tier.label) thumbnail path: \(url.path)")
+        #endif
         guard fileManager.fileExists(atPath: url.path) else {
+            #if DEBUG
             print("[ThumbnailProvider] missing thumbnail: \(url.path)")
+            #endif
             return nil
         }
         guard let image = NSImage(contentsOf: url), image.isValid else {
+            #if DEBUG
             print("[ThumbnailProvider] failed to load thumbnail image: \(url.path)")
+            #endif
             return nil
         }
+        #if DEBUG
         print("[ThumbnailProvider] loaded thumbnail: \(url.path)")
+        #endif
         return image
     }
 
@@ -59,7 +69,9 @@ final class MacThumbnailProvider {
             return large
         }
         guard let url = originalURL(for: screenshot) else { return nil }
+        #if DEBUG
         print("[ThumbnailProvider] falling back to original image: \(url.path)")
+        #endif
         guard fileManager.fileExists(atPath: url.path),
               let image = NSImage(contentsOf: url),
               image.isValid else {

@@ -34,9 +34,13 @@ final class MacThumbnailService: ThumbnailGenerating {
         try ensureParentDirectory(for: largeURL)
 
         try writeJPEG(from: source, maxPixel: Self.smallMaxPixel, to: smallURL)
+        #if DEBUG
         print("[ThumbnailService] wrote small thumbnail: \(smallURL.path)")
+        #endif
         try writeJPEG(from: source, maxPixel: Self.largeMaxPixel, to: largeURL)
+        #if DEBUG
         print("[ThumbnailService] wrote large thumbnail: \(largeURL.path)")
+        #endif
     }
 
     // MARK: - Helpers

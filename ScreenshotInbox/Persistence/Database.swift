@@ -57,7 +57,9 @@ final class Database {
         try exec("PRAGMA foreign_keys = ON;")
         try exec("PRAGMA journal_mode = WAL;")
         try exec("PRAGMA synchronous = NORMAL;")
+        #if DEBUG
         print("[Database] opened \(path)")
+        #endif
     }
 
     /// No-op default init kept for source compatibility with the previous

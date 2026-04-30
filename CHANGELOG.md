@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+Release preparation for `v0.1.0-alpha`.
+
+- Release metadata and native About panel
+- First-run local-first onboarding notice
+- Release build, ZIP, DMG, and notarization scripts
+- Release checklist and signing documentation
+
+## v0.1.0-alpha
+
 Initial open-source preparation.
 
 - Native macOS screenshot library

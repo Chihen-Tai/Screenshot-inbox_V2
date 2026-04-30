@@ -180,7 +180,9 @@ final class AutoImportService {
             includingPropertiesForKeys: [.isDirectoryKey, .creationDateKey, .contentModificationDateKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
         ) else {
+            #if DEBUG
             print("[AutoImport] cannot scan folder: \(folder.path)")
+            #endif
             return []
         }
         return urls

@@ -10,6 +10,8 @@ struct SettingsView: View {
                 .tabItem { Label("Library", systemImage: "externaldrive") }
             ImportSourceSettingsView()
                 .tabItem { Label("Auto Import", systemImage: "tray.and.arrow.down") }
+            PrivacySettingsView()
+                .tabItem { Label("Privacy", systemImage: "hand.raised") }
             OrganizationRulesSettingsView()
                 .tabItem { Label("Rules", systemImage: "wand.and.stars") }
             RenameSettingsView()
