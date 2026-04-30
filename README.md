@@ -80,7 +80,7 @@ The project is a Swift Package Manager executable target, not an Xcode project. 
 
 ## Release Builds
 
-The current pre-release version is `0.1.0-alpha` with build `1`.
+The current development pre-release version is `0.4.0-alpha-dev` with build `4`.
 
 Create a local release app bundle:
 

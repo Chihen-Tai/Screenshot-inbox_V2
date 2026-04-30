@@ -141,6 +141,7 @@ final class AppState: ObservableObject {
     private(set) var imageHashingService: ImageHashingService
     private(set) var pdfExportService: PDFExporting
     private(set) var exportShareService: ExportShareService
+    private(set) var clipboardService: ScreenshotClipboardService!
     private(set) var libraryIntegrityService: LibraryIntegrityService
     private(set) var folderAccessService: FolderAccessService
     private(set) var thumbnailProvider: MacThumbnailProvider
@@ -423,6 +424,15 @@ final class AppState: ObservableObject {
         }
 
         self.router = ScreenshotActionRouter(appState: self)
+        self.clipboardService = ScreenshotClipboardService(
+            screenshotsProvider: { [weak self] ids in
+                guard let self else { return [] }
+                let requested = Set(ids.compactMap(UUID.init(uuidString:)))
+                return self.filteredScreenshots.filter { requested.contains($0.id) }
+            },
+            libraryRootURL: library.libraryRootURL,
+            importService: self.importService
+        )
 
         // Pre-seed one item so the inspector populates on launch.
         if let first = allScreenshots.first {
@@ -2252,6 +2262,71 @@ final class AppState: ObservableObject {
                 selection.selectAll(in: visibleImportedIDs)
                 logSelectionChange(source: "import")
             }
+        }
+    }
+
+    func copySelectedScreenshotsToPasteboard() {
+        let ids = selectedScreenshots.map(\.uuidString)
+        guard !ids.isEmpty else {
+            showToast("No screenshots selected", kind: .info)
+            return
+        }
+        do {
+            let count = try clipboardService.copyScreenshots(ids: ids)
+            showToast("Copied \(count) screenshot\(count == 1 ? "" : "s")", kind: .success)
+        } catch {
+            print("[Clipboard] copy failed: \(error)")
+            showToast(error.localizedDescription, kind: .info)
+        }
+    }
+
+    func pasteClipboardIntoInbox() {
+        Task { [weak self] in
+            guard let self else { return }
+            guard database != nil else {
+                showToast("Library unavailable — cannot import", kind: .info)
+                return
+            }
+            guard clipboardService.canPasteImageContent() else {
+                showToast("No image found on clipboard", kind: .info)
+                return
+            }
+            do {
+                showToast("Importing clipboard image…", kind: .info)
+                let result = try await clipboardService.pasteIntoInbox()
+                applyImportResult(result, selectImported: true)
+                if !result.imported.isEmpty || !result.replaced.isEmpty || result.keptDuplicateCopies > 0 {
+                    showToast(Self.importSummary(
+                        imported: result.imported.count,
+                        duplicates: result.duplicates,
+                        keptDuplicateCopies: result.keptDuplicateCopies,
+                        replaced: result.replaced.count,
+                        unsupported: 0,
+                        failures: result.failures.count
+                    ), kind: .success)
+                } else if result.duplicates > 0 {
+                    showToast(Self.duplicateMessage(count: result.duplicates), kind: .info)
+                } else if !result.failures.isEmpty {
+                    showToast("Import failed for \(result.failures.count) file\(result.failures.count == 1 ? "" : "s")", kind: .info)
+                } else {
+                    showToast("No screenshots imported", kind: .info)
+                }
+            } catch ScreenshotClipboardError.noImageContent {
+                showToast("No image found on clipboard", kind: .info)
+            } catch {
+                print("[Clipboard] paste failed: \(error)")
+                showToast(error.localizedDescription, kind: .info)
+            }
+        }
+    }
+
+    func cutSelectedScreenshotsToPasteboard() {
+        let ids = selectedScreenshots.map(\.uuidString)
+        guard !ids.isEmpty else { return }
+        do {
+            try clipboardService.cutScreenshots(ids: ids)
+        } catch {
+            showToast("Cut is not available for screenshots", kind: .info)
         }
     }
 

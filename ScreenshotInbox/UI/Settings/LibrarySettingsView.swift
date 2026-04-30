@@ -9,7 +9,7 @@ struct LibrarySettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SettingsSection(title: "Library Location") {
+                SettingsSection(title: "Managed Library") {
                     Text(appState.library.libraryRootURL.path)
                         .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(Theme.SemanticColor.secondaryLabel)
@@ -27,28 +27,27 @@ struct LibrarySettingsView: View {
                 }
 
                 SettingsSection(title: "File Behavior / Source Folder Sync") {
-                    SettingsNote(text: "When disabled, Screenshot Inbox only changes its managed library copy. Your original Desktop, Downloads, or source folder files are left unchanged.")
+                    SettingsNote(text: "By default, Screenshot Inbox works in Library Mode. Imported files are copied into a managed library. Renaming, trashing, or deleting items inside Screenshot Inbox affects the managed copy only. Original Desktop, Downloads, or source folder files are left unchanged unless Source Folder Sync is enabled.")
 
-                    Toggle("Rename original source files when renaming screenshots", isOn: $appState.preferences.renameOriginalSourceFiles)
-                        .disabled(true)
-                    Toggle("Move original source files to macOS Trash when moving screenshots to Screenshot Inbox Trash", isOn: $appState.preferences.trashOriginalSourceFiles)
-                        .disabled(true)
-                    Toggle("Also delete original source files when permanently deleting screenshots", isOn: $appState.preferences.deleteOriginalSourceFiles)
-                        .disabled(true)
-                    Toggle("Copy newly added screenshots to a default folder", isOn: $appState.preferences.copyNewScreenshotsToDefaultFolder)
-                        .disabled(true)
-
-                    HStack {
-                        Text("Default folder")
-                        Spacer()
-                        Text(appState.preferences.defaultCopyFolderPath)
-                            .foregroundStyle(Theme.SemanticColor.secondaryLabel)
-                        Button("Choose Folder…") {}
-                            .disabled(true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SourceSyncStatusRow(
+                            title: "Rename original source files when renaming screenshots",
+                            status: "Coming later",
+                            detail: "Currently OFF. Renames apply only to the managed library copy."
+                        )
+                        SourceSyncStatusRow(
+                            title: "Move original source files to macOS Trash",
+                            status: "Coming later",
+                            detail: "Currently OFF. Trash only affects Screenshot Inbox managed files."
+                        )
+                        SourceSyncStatusRow(
+                            title: "Delete original source files permanently",
+                            status: "Not available",
+                            detail: "Permanent source deletion is intentionally unavailable in this alpha."
+                        )
                     }
-                    .font(.system(size: 12))
 
-                    SettingsNote(text: "Source Folder Sync is coming later and remains off until file operations, permissions, conflicts, and dangerous delete confirmations are fully implemented.")
+                    SettingsNote(text: "Source Folder Sync remains off until original-file permissions, conflict handling, and explicit confirmations are implemented. Screenshot Inbox will not silently modify Desktop, Downloads, or watched-folder originals.")
                 }
 
                 SettingsSection(title: "Library Maintenance") {
@@ -176,5 +175,33 @@ private struct LibraryHealthSummary: View {
 
     private func summaryLine(_ title: String, _ value: Int) -> some View {
         Text("\(title): \(value)")
+    }
+}
+
+private struct SourceSyncStatusRow: View {
+    let title: String
+    let status: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+                Text(status)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+            }
+            Text(detail)
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(Theme.SemanticColor.divider.opacity(0.65), lineWidth: 1)
+        )
     }
 }

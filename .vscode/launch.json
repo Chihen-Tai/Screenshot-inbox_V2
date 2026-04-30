@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screenshot_V2}",
+            "name": "Debug ScreenshotInbox",
+            "target": "ScreenshotInbox",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ScreenshotInbox"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:screenshot_V2}",
+            "name": "Release ScreenshotInbox",
+            "target": "ScreenshotInbox",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ScreenshotInbox"
+        }
+    ]
+}

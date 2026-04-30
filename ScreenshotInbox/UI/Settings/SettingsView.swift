@@ -6,7 +6,6 @@ enum SettingsTab: String, CaseIterable, Hashable {
     case autoImport = "Auto Import"
     case privacy = "Privacy"
     case rules = "Rules"
-    case rename = "Rename"
     case ocr = "OCR"
     case appearance = "Appearance"
     case quickFilters = "Quick Filters"
@@ -56,8 +55,6 @@ struct SettingsView: View {
                     PrivacySettingsView()
                 case .rules:
                     OrganizationRulesSettingsView()
-                case .rename:
-                    RenameSettingsView()
                 case .ocr:
                     OCRSettingsView()
                 case .appearance:

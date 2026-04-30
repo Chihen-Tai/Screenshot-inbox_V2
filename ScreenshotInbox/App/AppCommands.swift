@@ -59,21 +59,39 @@ struct AppCommands: Commands {
                 appState.performAppUndo()
             }
             .keyboardShortcut("z", modifiers: [.command])
+
+            Button("Redo") {
+                print("[AppCommands] Redo fired; firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
+                NSApp.sendAction(Selector(("redo:")), to: nil, from: nil)
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
         }
 
         CommandGroup(replacing: .pasteboard) {
             Button("Cut") {
-                NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
+                if AppKitFocusHelper.isTextInputFocused() {
+                    NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
+                    return
+                }
+                appState.cutSelectedScreenshotsToPasteboard()
             }
             .keyboardShortcut("x")
 
             Button("Copy") {
-                NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
+                if AppKitFocusHelper.isTextInputFocused() {
+                    NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
+                    return
+                }
+                appState.copySelectedScreenshotsToPasteboard()
             }
             .keyboardShortcut("c")
 
             Button("Paste") {
-                NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+                if AppKitFocusHelper.isTextInputFocused() {
+                    NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+                    return
+                }
+                appState.pasteClipboardIntoInbox()
             }
             .keyboardShortcut("v")
 
