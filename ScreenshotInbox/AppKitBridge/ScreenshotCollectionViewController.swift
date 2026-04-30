@@ -45,6 +45,7 @@ final class ScreenshotCollectionViewController: NSViewController {
 
     private let layout = ScreenshotCollectionViewLayout()
     private var currentLayoutMode: Theme.LayoutMode = .regular
+    private var currentThumbnailSize: GridThumbnailSize = .medium
     private var currentParams: Theme.Layout.Grid.ModeParams =
         Theme.Layout.Grid.params(for: .regular)
     private(set) var collectionView: NSCollectionView!
@@ -54,10 +55,11 @@ final class ScreenshotCollectionViewController: NSViewController {
     /// when the mode hasn't changed so we don't churn `invalidateLayout()`.
     /// Visible cells are also rebuilt to the new params (font, checkmark,
     /// thumb aspect) so the mode flip is visually consistent immediately.
-    func applyLayoutMode(_ mode: Theme.LayoutMode) {
-        guard mode != currentLayoutMode else { return }
+    func applyLayoutMode(_ mode: Theme.LayoutMode, thumbnailSize: GridThumbnailSize) {
+        guard mode != currentLayoutMode || thumbnailSize != currentThumbnailSize else { return }
         currentLayoutMode = mode
-        let params = Theme.Layout.Grid.params(for: mode)
+        currentThumbnailSize = thumbnailSize
+        let params = Theme.Layout.Grid.params(for: mode, thumbnailSize: thumbnailSize)
         currentParams = params
         layout.apply(params: params)
         if let cv = collectionView {

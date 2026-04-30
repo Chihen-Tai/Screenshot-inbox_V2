@@ -13,10 +13,10 @@ enum InspectorSection: Hashable {
     static let singleSelectionOrder: [InspectorSection] = [
         .preview,
         .actions,
-        .metadata,
         .ocr,
         .detectedCodes,
-        .tags
+        .tags,
+        .metadata
     ]
 
     static let multiSelectionOrder: [InspectorSection] = [
@@ -271,6 +271,10 @@ private struct MultiActionsSection: View {
                 rowDivider
                 row(title: "Export Originals", systemImage: "square.and.arrow.up") {
                     appState.router.exportOriginals(appState.selectedScreenshots)
+                }
+                rowDivider
+                row(title: "Share", systemImage: "square.and.arrow.up.on.square") {
+                    appState.router.share(appState.selectedScreenshots)
                 }
                 rowDivider
                 row(title: "Copy OCR Text", systemImage: "text.viewfinder") {

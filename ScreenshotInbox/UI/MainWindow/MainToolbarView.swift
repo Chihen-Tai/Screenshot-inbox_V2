@@ -1,14 +1,19 @@
 import SwiftUI
 
 enum ToolbarViewOptionsMenuItem: CaseIterable, Hashable {
+    case thumbnailSize
+    case sortBy
+    case sortDirection
     case toggleSidebar
     case toggleInspector
+    case customizeFilters
 }
 
 enum ToolbarMoreMenuItem: CaseIterable, Hashable {
     case refreshOCR
     case rerunOCR
     case rerunCodeDetection
+    case share
     case exportPDF
     case revealLibraryFolder
     case runRulesNow
@@ -25,6 +30,9 @@ struct MainToolbarView: ToolbarContent {
     let mode: Theme.LayoutMode
     @Binding var sidebarVisible: Bool
     @Binding var inspectorVisible: Bool
+    @Binding var thumbnailSize: GridThumbnailSize
+    @Binding var sortField: ScreenshotSortField
+    @Binding var sortDirection: SortDirection
     let selectedCount: Int
     let isMaintenanceRunning: Bool
     var onImport: () -> Void = {}
@@ -32,10 +40,12 @@ struct MainToolbarView: ToolbarContent {
     var onRerunOCR: () -> Void = {}
     var onRerunCodeDetection: () -> Void = {}
     var onExportPDF: () -> Void = {}
+    var onShare: () -> Void = {}
     var onRevealLibraryFolder: () -> Void = {}
     var onRunRulesNow: () -> Void = {}
     var onRebuildThumbnails: () -> Void = {}
     var onOpenSettings: () -> Void = {}
+    var onCustomizeFilters: () -> Void = {}
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
@@ -80,6 +90,14 @@ struct MainToolbarView: ToolbarContent {
             }
             .help("Import screenshots")
 
+            Button {
+                onShare()
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            .disabled(selectedCount == 0)
+            .help("Share selected screenshots")
+
             Menu {
                 ForEach(ToolbarViewOptionsMenuItem.allCases, id: \.self) { item in
                     viewOptionsMenuItem(item)
@@ -110,10 +128,32 @@ struct MainToolbarView: ToolbarContent {
     @ViewBuilder
     private func viewOptionsMenuItem(_ item: ToolbarViewOptionsMenuItem) -> some View {
         switch item {
+        case .thumbnailSize:
+            Picker("Thumbnail Size", selection: $thumbnailSize) {
+                ForEach(GridThumbnailSize.allCases, id: \.self) { size in
+                    Text(size.title).tag(size)
+                }
+            }
+        case .sortBy:
+            Picker("Sort By", selection: $sortField) {
+                ForEach(ScreenshotSortField.allCases, id: \.self) { field in
+                    Text(field.title).tag(field)
+                }
+            }
+        case .sortDirection:
+            Picker("Sort Direction", selection: $sortDirection) {
+                ForEach(SortDirection.allCases, id: \.self) { direction in
+                    Text(direction.title).tag(direction)
+                }
+            }
         case .toggleSidebar:
             Toggle("Left Sidebar", isOn: $sidebarVisible)
         case .toggleInspector:
             Toggle("Right Inspector", isOn: $inspectorVisible)
+        case .customizeFilters:
+            Button("Customize Filters…", systemImage: "line.3.horizontal.decrease.circle") {
+                onCustomizeFilters()
+            }
         }
     }
 
@@ -132,6 +172,11 @@ struct MainToolbarView: ToolbarContent {
         case .rerunCodeDetection:
             Button("Re-run QR Detection", systemImage: "qrcode.viewfinder") {
                 onRerunCodeDetection()
+            }
+            .disabled(selectedCount == 0)
+        case .share:
+            Button("Share…", systemImage: "square.and.arrow.up") {
+                onShare()
             }
             .disabled(selectedCount == 0)
         case .exportPDF:

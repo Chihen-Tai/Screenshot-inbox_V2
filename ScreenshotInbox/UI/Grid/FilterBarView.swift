@@ -3,12 +3,10 @@ import SwiftUI
 struct FilterBarView: View {
     @EnvironmentObject private var appState: AppState
 
-    private let chips: [FilterChip] = [.all, .favorites, .ocrComplete, .tagged, .png, .thisWeek]
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(chips, id: \.self) { chip in
+                ForEach(appState.enabledQuickFilterChips, id: \.self) { chip in
                     FilterChipButton(
                         chip: chip,
                         isActive: appState.activeFilterChip == chip,
@@ -18,6 +16,11 @@ struct FilterBarView: View {
             }
             .padding(.horizontal, Theme.Layout.filterBarHorizontalInset)
             .padding(.vertical, Theme.Layout.filterBarVerticalInset)
+        }
+        .onChange(of: appState.preferences.quickFilters) { _, _ in
+            if !appState.enabledQuickFilterChips.contains(appState.activeFilterChip) {
+                appState.activeFilterChip = .all
+            }
         }
     }
 }

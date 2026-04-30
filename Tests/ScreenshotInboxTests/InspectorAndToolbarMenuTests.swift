@@ -7,10 +7,10 @@ struct InspectorAndToolbarMenuTests {
         #expect(InspectorSection.singleSelectionOrder == [
             .preview,
             .actions,
-            .metadata,
             .ocr,
             .detectedCodes,
-            .tags
+            .tags,
+            .metadata
         ])
     }
 
@@ -26,8 +26,12 @@ struct InspectorAndToolbarMenuTests {
     @Test
     func toolbarViewOptionsMenuContainsOnlyWorkingItems() {
         #expect(ToolbarViewOptionsMenuItem.allCases == [
+            .thumbnailSize,
+            .sortBy,
+            .sortDirection,
             .toggleSidebar,
-            .toggleInspector
+            .toggleInspector,
+            .customizeFilters
         ])
     }
 
@@ -37,6 +41,7 @@ struct InspectorAndToolbarMenuTests {
             .refreshOCR,
             .rerunOCR,
             .rerunCodeDetection,
+            .share,
             .exportPDF,
             .revealLibraryFolder,
             .runRulesNow,

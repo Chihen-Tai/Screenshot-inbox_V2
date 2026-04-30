@@ -52,6 +52,16 @@ final class ScreenshotActionRouter {
         }
     }
 
+    func openWith(_ shots: [Screenshot]) {
+        log("openWith", shots)
+        guard let url = managedOriginalURL(for: shots.first) else { return }
+        do {
+            try appState.fileActionService.openWithPicker(url)
+        } catch {
+            appState.showToast(fileActionMessage(for: error), kind: .info)
+        }
+    }
+
     func quickLook(_ shots: [Screenshot]) {
         log("quickLook", shots)
         guard let first = shots.first else { return }

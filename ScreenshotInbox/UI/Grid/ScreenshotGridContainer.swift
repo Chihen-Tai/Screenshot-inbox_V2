@@ -33,6 +33,7 @@ struct ScreenshotGridContainer: View {
                 screenshots: appState.filteredScreenshots,
                 selectedIDs: appState.selectedScreenshotIDs,
                 layoutMode: appState.layoutMode,
+                thumbnailSize: appState.gridThumbnailSize,
                 thumbnailProvider: appState.thumbnailProvider,
                 onClick: handleClick,
                 onSelectionSnapshot: { ids, source in

@@ -14,8 +14,15 @@ enum FilterChip: String, CaseIterable, Hashable {
     case all = "All"
     case favorites = "Favorites"
     case ocrComplete = "OCR Complete"
+    case ocrPending = "OCR Pending"
     case tagged = "Tagged"
+    case untagged = "Untagged"
     case png = "PNG"
+    case jpg = "JPG"
+    case heic = "HEIC"
+    case hasQRCode = "Has QR Code"
+    case hasURL = "Has URL"
+    case today = "Today"
     case thisWeek = "This Week"
 }
 

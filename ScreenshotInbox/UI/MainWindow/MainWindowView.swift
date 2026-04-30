@@ -20,6 +20,9 @@ struct MainWindowView: View {
                     mode: appState.layoutMode,
                     sidebarVisible: $appState.sidebarOverrideVisible,
                     inspectorVisible: $appState.inspectorOverrideVisible,
+                    thumbnailSize: $appState.gridThumbnailSize,
+                    sortField: $appState.screenshotSortField,
+                    sortDirection: $appState.screenshotSortDirection,
                     selectedCount: appState.selectedScreenshots.count,
                     isMaintenanceRunning: appState.isMaintenanceRunning,
                     onImport: presentImportPanel,
@@ -36,11 +39,17 @@ struct MainWindowView: View {
                     onExportPDF: {
                         appState.router.mergeIntoPDF(appState.selectedScreenshots)
                     },
+                    onShare: {
+                        appState.router.share(appState.selectedScreenshots)
+                    },
                     onRevealLibraryFolder: appState.revealLibraryFolder,
                     onRunRulesNow: appState.runRulesNowForSelection,
                     onRebuildThumbnails: appState.rebuildAllThumbnails,
                     onOpenSettings: {
                         SettingsWindowOpener.open(appState: appState)
+                    },
+                    onCustomizeFilters: {
+                        SettingsWindowOpener.open(appState: appState, selectedTab: .quickFilters)
                     }
                 )
             }

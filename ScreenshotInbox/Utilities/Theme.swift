@@ -148,9 +148,14 @@ enum Theme {
             }
 
             static func params(for mode: LayoutMode) -> ModeParams {
+                params(for: mode, thumbnailSize: .medium)
+            }
+
+            static func params(for mode: LayoutMode, thumbnailSize: GridThumbnailSize) -> ModeParams {
+                let base: ModeParams
                 switch mode {
                 case .regular:
-                    return ModeParams(
+                    base = ModeParams(
                         target: 230, minItem: 200, maxItem: 265,
                         interitem: 24, line: 32, sectionH: 24,
                         thumbAspect: 0.66, thumbInset: 8,
@@ -160,7 +165,7 @@ enum Theme {
                         checkmarkSize: 18
                     )
                 case .medium:
-                    return ModeParams(
+                    base = ModeParams(
                         target: 205, minItem: 190, maxItem: 240,
                         interitem: 20, line: 28, sectionH: 20,
                         thumbAspect: 0.64, thumbInset: 7,
@@ -170,7 +175,7 @@ enum Theme {
                         checkmarkSize: 16
                     )
                 case .compact:
-                    return ModeParams(
+                    base = ModeParams(
                         target: 170, minItem: 150, maxItem: 220,
                         interitem: 14, line: 22, sectionH: 14,
                         thumbAspect: 0.62, thumbInset: 6,
@@ -180,6 +185,31 @@ enum Theme {
                         checkmarkSize: 14
                     )
                 }
+                let multiplier: CGFloat
+                switch thumbnailSize {
+                case .small: multiplier = 0.86
+                case .medium: multiplier = 1.0
+                case .large: multiplier = 1.16
+                }
+                return ModeParams(
+                    target: base.target * multiplier,
+                    minItem: base.minItem * multiplier,
+                    maxItem: base.maxItem * multiplier,
+                    interitem: base.interitem,
+                    line: base.line,
+                    sectionH: base.sectionH,
+                    thumbAspect: base.thumbAspect,
+                    thumbInset: base.thumbInset,
+                    labelTopGap: base.labelTopGap,
+                    labelBottomGap: base.labelBottomGap,
+                    labelBottomInset: base.labelBottomInset,
+                    labelHPad: base.labelHPad,
+                    nameFontSize: base.nameFontSize,
+                    nameLineHeight: base.nameLineHeight,
+                    dateFontSize: base.dateFontSize,
+                    dateLineHeight: base.dateLineHeight,
+                    checkmarkSize: base.checkmarkSize
+                )
             }
         }
     }

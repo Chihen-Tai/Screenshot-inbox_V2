@@ -26,6 +26,31 @@ struct LibrarySettingsView: View {
                     SettingsNote(text: "Screenshot Inbox currently runs in Library Mode. Imported files are copied into this managed folder.")
                 }
 
+                SettingsSection(title: "File Behavior / Source Folder Sync") {
+                    SettingsNote(text: "When disabled, Screenshot Inbox only changes its managed library copy. Your original Desktop, Downloads, or source folder files are left unchanged.")
+
+                    Toggle("Rename original source files when renaming screenshots", isOn: $appState.preferences.renameOriginalSourceFiles)
+                        .disabled(true)
+                    Toggle("Move original source files to macOS Trash when moving screenshots to Screenshot Inbox Trash", isOn: $appState.preferences.trashOriginalSourceFiles)
+                        .disabled(true)
+                    Toggle("Also delete original source files when permanently deleting screenshots", isOn: $appState.preferences.deleteOriginalSourceFiles)
+                        .disabled(true)
+                    Toggle("Copy newly added screenshots to a default folder", isOn: $appState.preferences.copyNewScreenshotsToDefaultFolder)
+                        .disabled(true)
+
+                    HStack {
+                        Text("Default folder")
+                        Spacer()
+                        Text(appState.preferences.defaultCopyFolderPath)
+                            .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                        Button("Choose Folder…") {}
+                            .disabled(true)
+                    }
+                    .font(.system(size: 12))
+
+                    SettingsNote(text: "Source Folder Sync is coming later and remains off until file operations, permissions, conflicts, and dangerous delete confirmations are fully implemented.")
+                }
+
                 SettingsSection(title: "Library Maintenance") {
                     if let status = appState.maintenanceStatusText {
                         Text(status)

@@ -1,31 +1,79 @@
 import SwiftUI
 
+enum SettingsTab: String, CaseIterable, Hashable {
+    case general = "General"
+    case library = "Library"
+    case autoImport = "Auto Import"
+    case privacy = "Privacy"
+    case rules = "Rules"
+    case rename = "Rename"
+    case ocr = "OCR"
+    case appearance = "Appearance"
+    case quickFilters = "Quick Filters"
+    case advanced = "Advanced"
+
+    static var available: [SettingsTab] {
+        #if DEBUG
+        return allCases
+        #else
+        return allCases.filter { $0 != .advanced }
+        #endif
+    }
+}
+
 /// Root of the Settings scene.
 struct SettingsView: View {
+    @State private var selectedTab: SettingsTab
+
+    init(initialTab: SettingsTab = .general) {
+        _selectedTab = State(initialValue: initialTab)
+    }
+
     var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            LibrarySettingsView()
-                .tabItem { Label("Library", systemImage: "externaldrive") }
-            ImportSourceSettingsView()
-                .tabItem { Label("Auto Import", systemImage: "tray.and.arrow.down") }
-            PrivacySettingsView()
-                .tabItem { Label("Privacy", systemImage: "hand.raised") }
-            OrganizationRulesSettingsView()
-                .tabItem { Label("Rules", systemImage: "wand.and.stars") }
-            RenameSettingsView()
-                .tabItem { Label("Rename", systemImage: "pencil") }
-            OCRSettingsView()
-                .tabItem { Label("OCR", systemImage: "text.viewfinder") }
-            AppearanceSettingsView()
-                .tabItem { Label("Appearance", systemImage: "paintbrush") }
-            #if DEBUG
-            AdvancedSettingsView()
-                .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
-            #endif
+        VStack(spacing: 0) {
+            Picker("Settings Section", selection: $selectedTab) {
+                ForEach(SettingsTab.available, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            Group {
+                switch selectedTab {
+                case .general:
+                    GeneralSettingsView()
+                case .library:
+                    LibrarySettingsView()
+                case .autoImport:
+                    ImportSourceSettingsView()
+                case .privacy:
+                    PrivacySettingsView()
+                case .rules:
+                    OrganizationRulesSettingsView()
+                case .rename:
+                    RenameSettingsView()
+                case .ocr:
+                    OCRSettingsView()
+                case .appearance:
+                    AppearanceSettingsView()
+                case .quickFilters:
+                    QuickFiltersSettingsView()
+                case .advanced:
+                    #if DEBUG
+                    AdvancedSettingsView()
+                    #else
+                    EmptyView()
+                    #endif
+                }
+            }
         }
-        .frame(width: 640, height: 480)
+        .frame(minWidth: 800, idealWidth: 900, minHeight: 520, idealHeight: 620)
     }
 }
 

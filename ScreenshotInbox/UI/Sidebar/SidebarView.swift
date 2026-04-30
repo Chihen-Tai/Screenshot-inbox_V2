@@ -57,26 +57,18 @@ struct SidebarView: View {
                 #endif
                 openSettingsPreservingSelection()
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: viewModel.settingsAction.systemImage)
-                        .font(.system(size: 13))
-                        .frame(width: 20)
-                        .foregroundStyle(Theme.SemanticColor.secondaryLabel)
-                    Text(viewModel.settingsAction.title)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.SemanticColor.label)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, Theme.Layout.sidebarRowHPadding)
-                .padding(.vertical, 9)
-                .contentShape(Rectangle())
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(.clear)
-                        .padding(.horizontal, Theme.Layout.sidebarHorizontalInset)
+                SidebarItemView(
+                    item: SidebarItem(
+                        selection: .inbox,
+                        title: viewModel.settingsAction.title,
+                        systemImage: viewModel.settingsAction.systemImage,
+                        count: nil
+                    )
                 )
+                .padding(.horizontal, Theme.Layout.sidebarHorizontalInset)
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, Theme.Layout.sidebarRowHPadding - Theme.Layout.sidebarHorizontalInset)
             .padding(.vertical, 6)
         }
         .background(.regularMaterial)

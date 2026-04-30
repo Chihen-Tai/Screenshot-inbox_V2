@@ -13,6 +13,11 @@ struct ActionsSectionView: View {
                     appState.router.open([screenshot])
                 }
                 rowDivider
+                ActionRow(title: "Open With…",
+                          systemImage: "square.grid.2x2") {
+                    appState.router.openWith([screenshot])
+                }
+                rowDivider
                 ActionRow(title: "Reveal in Finder",
                           systemImage: "magnifyingglass") {
                     appState.router.revealInFinder([screenshot])
@@ -63,6 +68,11 @@ struct ActionsSectionView: View {
                     ActionRow(title: "Export Original",
                               systemImage: "square.and.arrow.up") {
                         appState.router.exportOriginals([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Share…",
+                              systemImage: "square.and.arrow.up.on.square") {
+                        appState.router.share([screenshot])
                     }
                     rowDivider
                     ActionRow(title: "Copy Image",

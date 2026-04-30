@@ -126,13 +126,15 @@ final class ExportShareService {
         return lines.count
     }
 
-    func share(_ screenshots: [Screenshot]) {
+    @discardableResult
+    func share(_ screenshots: [Screenshot]) -> Int {
         let urls = fileURLs(for: screenshots)
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty else { return 0 }
         let picker = NSSharingServicePicker(items: urls)
         if let view = NSApp.keyWindow?.contentView {
             picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
         }
+        return urls.count
     }
 
     private func originalURL(for screenshot: Screenshot) -> URL? {

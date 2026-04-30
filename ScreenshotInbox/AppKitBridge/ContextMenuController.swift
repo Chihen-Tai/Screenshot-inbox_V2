@@ -41,10 +41,12 @@ final class ContextMenuController {
             menu.addItem(.separator())
             add(menu, title: "Reveal in Finder",              key: .revealInFinder)
             add(menu, title: "Open",                          key: .open)
+            add(menu, title: "Open With…",                    key: .openWith)
             return menu
         }
 
         add(menu, title: "Open",                              key: .open)
+        add(menu, title: "Open With…",                        key: .openWith)
         add(menu, title: "Quick Look",                        key: .quickLook,
             keyEquivalent: " ", modifiers: [])
         add(menu, title: "Reveal in Finder",                  key: .revealInFinder)
@@ -164,6 +166,7 @@ final class ContextMenuController {
 /// the AppKit boundary; raw enums conform via `RawRepresentable`.
 private enum MenuActionKey: String {
     case open
+    case openWith
     case quickLook
     case revealInFinder
     case rename
@@ -219,6 +222,7 @@ private final class MenuActionInvoker: NSObject {
 
         switch key {
         case .open:              router.open(targets)
+        case .openWith:          router.openWith(targets)
         case .quickLook:         router.quickLook(targets)
         case .revealInFinder:    router.revealInFinder(targets)
         case .rename:

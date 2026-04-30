@@ -16,6 +16,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     let screenshots: [Screenshot]
     let selectedIDs: Set<UUID>
     let layoutMode: Theme.LayoutMode
+    let thumbnailSize: GridThumbnailSize
     let thumbnailProvider: MacThumbnailProvider?
     let onClick: (UUID, NSEvent.ModifierFlags) -> Void
     let onSelectionSnapshot: (Set<UUID>, String) -> Void
@@ -32,7 +33,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
         let vc = ScreenshotCollectionViewController()
         vc.thumbnailProvider = thumbnailProvider
         wireCallbacks(vc)
-        vc.applyLayoutMode(layoutMode)
+        vc.applyLayoutMode(layoutMode, thumbnailSize: thumbnailSize)
         vc.applyDataIfNeeded(screenshots: screenshots, selectedIDs: selectedIDs)
         return vc
     }
@@ -40,7 +41,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     func updateNSViewController(_ vc: ScreenshotCollectionViewController, context: Context) {
         vc.thumbnailProvider = thumbnailProvider
         wireCallbacks(vc)
-        vc.applyLayoutMode(layoutMode)
+        vc.applyLayoutMode(layoutMode, thumbnailSize: thumbnailSize)
         vc.applyDataIfNeeded(screenshots: screenshots, selectedIDs: selectedIDs)
     }
 

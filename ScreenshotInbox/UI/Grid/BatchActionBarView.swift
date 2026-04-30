@@ -48,6 +48,9 @@ struct BatchActionBarView: View {
                     BatchButton(title: isCompact ? "Export" : "Export Originals",
                                 systemImage: "square.and.arrow.up",
                                 action: { appState.router.exportOriginals(appState.selectedScreenshots) })
+                    BatchButton(title: "Share",
+                                systemImage: "square.and.arrow.up.on.square",
+                                action: { appState.router.share(appState.selectedScreenshots) })
                     BatchButton(title: "Trash",
                                 systemImage: "trash",
                                 style: .destructive,

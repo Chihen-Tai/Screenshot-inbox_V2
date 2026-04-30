@@ -36,6 +36,27 @@ final class AppState: ObservableObject {
             }
         }
     }
+    @Published var gridThumbnailSize: GridThumbnailSize = AppPreferences.defaults.gridThumbnailSize {
+        didSet {
+            if preferences.gridThumbnailSize != gridThumbnailSize {
+                preferences.gridThumbnailSize = gridThumbnailSize
+            }
+        }
+    }
+    @Published var screenshotSortField: ScreenshotSortField = AppPreferences.defaults.screenshotSortField {
+        didSet {
+            if preferences.screenshotSortField != screenshotSortField {
+                preferences.screenshotSortField = screenshotSortField
+            }
+        }
+    }
+    @Published var screenshotSortDirection: SortDirection = AppPreferences.defaults.screenshotSortDirection {
+        didSet {
+            if preferences.screenshotSortDirection != screenshotSortDirection {
+                preferences.screenshotSortDirection = screenshotSortDirection
+            }
+        }
+    }
 
     // MARK: - Window-driven layout overrides
 
@@ -211,6 +232,9 @@ final class AppState: ObservableObject {
         self.settingsService = settingsService
         self.preferences = loadedPreferences
         self.isAutoImportEnabled = loadedPreferences.autoImportEnabled
+        self.gridThumbnailSize = loadedPreferences.gridThumbnailSize
+        self.screenshotSortField = loadedPreferences.screenshotSortField
+        self.screenshotSortDirection = loadedPreferences.screenshotSortDirection
         self.sidebarOverrideVisible = loadedPreferences.sidebarVisibleByDefault
         self.inspectorOverrideVisible = loadedPreferences.inspectorVisibleByDefault
         self.sidebarPanelWidth = CGFloat(loadedPreferences.sidebarPanelWidth)
@@ -430,6 +454,18 @@ final class AppState: ObservableObject {
            isAutoImportEnabled != preferences.autoImportEnabled {
             isAutoImportEnabled = preferences.autoImportEnabled
         }
+        if oldValue.gridThumbnailSize != preferences.gridThumbnailSize,
+           gridThumbnailSize != preferences.gridThumbnailSize {
+            gridThumbnailSize = preferences.gridThumbnailSize
+        }
+        if oldValue.screenshotSortField != preferences.screenshotSortField,
+           screenshotSortField != preferences.screenshotSortField {
+            screenshotSortField = preferences.screenshotSortField
+        }
+        if oldValue.screenshotSortDirection != preferences.screenshotSortDirection,
+           screenshotSortDirection != preferences.screenshotSortDirection {
+            screenshotSortDirection = preferences.screenshotSortDirection
+        }
         #if DEBUG
         if oldValue.showDebugControls != preferences.showDebugControls {
             showDebugControls = preferences.showDebugControls
@@ -476,18 +512,88 @@ final class AppState: ObservableObject {
         case .all:         chipFiltered = base
         case .favorites:   chipFiltered = base.filter(\.isFavorite)
         case .ocrComplete: chipFiltered = base.filter(\.isOCRComplete)
+        case .ocrPending:  chipFiltered = base.filter { !$0.isOCRComplete }
         case .tagged:      chipFiltered = base.filter { !$0.tags.isEmpty }
+        case .untagged:    chipFiltered = base.filter { $0.tags.isEmpty }
         case .png:         chipFiltered = base.filter { $0.format == "PNG" }
+        case .jpg:         chipFiltered = base.filter { $0.format == "JPG" || $0.format == "JPEG" }
+        case .heic:        chipFiltered = base.filter { $0.format == "HEIC" || $0.format == "HEIF" }
+        case .hasQRCode:
+            chipFiltered = base.filter { !(detectedCodesByScreenshotUUID[$0.uuidString] ?? []).isEmpty }
+        case .hasURL:
+            chipFiltered = base.filter { (detectedCodesByScreenshotUUID[$0.uuidString] ?? []).contains(where: \.isURL) }
+        case .today:
+            chipFiltered = base.filter { Calendar.current.isDateInToday($0.createdAt) }
         case .thisWeek:
             let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
             chipFiltered = base.filter { $0.createdAt > cutoff }
         }
-        return searchService.filter(
+        let searched = searchService.filter(
             chipFiltered,
             query: searchQuery,
             collectionNamesByScreenshotID: collectionNamesByScreenshotID,
             detectedCodesByScreenshotID: detectedCodesByScreenshotUUID
         )
+        return sortedScreenshots(searched)
+    }
+
+    var enabledQuickFilterChips: [FilterChip] {
+        preferences.quickFilters.filter(\.isEnabled).map(\.chip)
+    }
+
+    func resetQuickFiltersToDefaults() {
+        preferences.quickFilters = AppPreferences.defaultQuickFilters
+        if !enabledQuickFilterChips.contains(activeFilterChip) {
+            activeFilterChip = .all
+        }
+    }
+
+    func moveQuickFilter(fromOffsets source: IndexSet, toOffset destination: Int) {
+        preferences.quickFilters.move(fromOffsets: source, toOffset: destination)
+    }
+
+    func moveQuickFilterUp(_ filter: QuickFilterPreference) {
+        guard let index = preferences.quickFilters.firstIndex(of: filter), index > 0 else { return }
+        preferences.quickFilters.swapAt(index, index - 1)
+    }
+
+    func moveQuickFilterDown(_ filter: QuickFilterPreference) {
+        guard let index = preferences.quickFilters.firstIndex(of: filter),
+              index < preferences.quickFilters.count - 1 else { return }
+        preferences.quickFilters.swapAt(index, index + 1)
+    }
+
+    private func sortedScreenshots(_ screenshots: [Screenshot]) -> [Screenshot] {
+        screenshots.sorted { left, right in
+            let comparison: ComparisonResult
+            switch screenshotSortField {
+            case .createdDate:
+                if left.createdAt == right.createdAt {
+                    comparison = left.name.localizedStandardCompare(right.name)
+                } else {
+                    comparison = left.createdAt < right.createdAt ? .orderedAscending : .orderedDescending
+                }
+            case .name:
+                let nameOrder = left.name.localizedStandardCompare(right.name)
+                comparison = nameOrder == .orderedSame
+                    ? (left.createdAt < right.createdAt ? .orderedAscending : .orderedDescending)
+                    : nameOrder
+            case .size:
+                if left.byteSize == right.byteSize {
+                    comparison = left.name.localizedStandardCompare(right.name)
+                } else {
+                    comparison = left.byteSize < right.byteSize ? .orderedAscending : .orderedDescending
+                }
+            }
+            switch comparison {
+            case .orderedAscending:
+                return screenshotSortDirection == .ascending
+            case .orderedDescending:
+                return screenshotSortDirection == .descending
+            case .orderedSame:
+                return left.id.uuidString < right.id.uuidString
+            }
+        }
     }
 
     var displayTitle: String {
@@ -2452,7 +2558,14 @@ final class AppState: ObservableObject {
     }
 
     func shareFiles(_ shots: [Screenshot]) {
-        exportShareService.share(shots)
+        let shared = exportShareService.share(shots)
+        guard shared > 0 else {
+            showToast("No image files available to share", kind: .info)
+            return
+        }
+        if shared < shots.count {
+            showToast("Sharing \(shared) file\(shared == 1 ? "" : "s"); skipped \(shots.count - shared) missing file\(shots.count - shared == 1 ? "" : "s")", kind: .info)
+        }
     }
 
     private func chooseExportFolder(message: String) -> URL? {
