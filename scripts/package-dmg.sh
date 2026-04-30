@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="0.2.0-alpha"
+VERSION="0.3.0-alpha"
 APP_PATH="$ROOT_DIR/dist/Screenshot Inbox.app"
 STAGING_DIR="$ROOT_DIR/dist/dmg-root"
 DMG_PATH="$ROOT_DIR/dist/ScreenshotInbox-$VERSION.dmg"
