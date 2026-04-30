@@ -8,6 +8,7 @@ final class OCRQueueService {
     private var runningIDs: Set<String> = []
     private var isRunning = false
     private var onUpdate: (@MainActor () -> Void)?
+    private var onComplete: (@MainActor (String) -> Void)?
 
     init(
         repository: OCRRepository,
@@ -19,8 +20,12 @@ final class OCRQueueService {
         self.ocrService = ocrService
     }
 
-    func start(onUpdate: @escaping @MainActor () -> Void) {
+    func start(
+        onUpdate: @escaping @MainActor () -> Void,
+        onComplete: (@MainActor (String) -> Void)? = nil
+    ) {
         self.onUpdate = onUpdate
+        self.onComplete = onComplete
         do {
             try repository.resetProcessingToPending()
         } catch {
@@ -93,6 +98,7 @@ final class OCRQueueService {
             #if DEBUG
             print("[OCR] complete \(job.screenshotUUID) chars=\(result.text.count)")
             #endif
+            onComplete?(job.screenshotUUID)
         } catch {
             do {
                 try repository.markFailed(screenshotUUID: job.screenshotUUID, error: String(describing: error))

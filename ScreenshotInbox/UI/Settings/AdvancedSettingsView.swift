@@ -17,8 +17,14 @@ struct AdvancedSettingsView: View {
                 Button("Re-run OCR Queue") {
                     appState.rerunOCR(for: appState.allScreenshots)
                 }
+                Button("Rebuild Duplicate Index") {
+                    appState.rebuildDuplicateIndex()
+                }
+                Button("Print Duplicate Groups") {
+                    appState.printDuplicateGroups()
+                }
                 Button("Rebuild Search Index") {
-                    appState.showToast("Search index rebuild is coming later", kind: .comingSoon)
+                    appState.rebuildSearchIndex()
                 }
             }
             Spacer()

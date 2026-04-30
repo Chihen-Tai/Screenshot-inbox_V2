@@ -17,8 +17,8 @@ struct SidebarView: View {
                 }
 
                 Section {
-                    ForEach(collectionItems) { item in
-                        sidebarRow(item)
+                    ForEach(appState.collections, id: \.uuid) { collection in
+                        collectionRow(collection)
                     }
                 } header: {
                     collectionsHeader
@@ -27,6 +27,9 @@ struct SidebarView: View {
                 Section {
                     ForEach(smartItems) { item in
                         SidebarItemView(item: item)
+                            .contextMenu {
+                                smartContextMenu(for: item)
+                            }
                     }
                 } header: {
                     SidebarSectionView(title: "Smart Collections")
@@ -118,8 +121,150 @@ struct SidebarView: View {
                     }
                 )
             )
+            .contextMenu {
+                libraryContextMenu(for: item)
+            }
         } else {
             SidebarItemView(item: item)
+                .contextMenu {
+                    libraryContextMenu(for: item)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func collectionRow(_ collection: ScreenshotCollection) -> some View {
+        let selection = SidebarSelection.collection(collection.uuid)
+        let item = SidebarItem(
+            selection: selection,
+            title: collection.name,
+            systemImage: collection.name == "Chemistry" ? "atom" : "folder",
+            count: appState.collectionCount(forUUID: collection.uuid)
+        )
+
+        Button {
+            #if DEBUG
+            print("[Sidebar] left click collection uuid=\(collection.uuid) name=\(collection.name)")
+            #endif
+            appState.sidebarSelection = selection
+        } label: {
+            SidebarItemView(
+                item: item,
+                isDropTargeted: targetedDropSelection == selection
+            )
+        }
+        .buttonStyle(.plain)
+        .tag(selection)
+        .transaction { transaction in
+            transaction.disablesAnimations = true
+        }
+        .background(
+            SidebarDropTargetView(
+                targetName: collection.name,
+                targetCollectionUUID: collection.uuid,
+                onTargeted: { isTargeted in
+                    targetedDropSelection = isTargeted ? selection : nil
+                },
+                onDrop: { ids in
+                    handleInternalScreenshotDrop(ids, on: selection)
+                },
+                onCollectionHover: { sourceUUID, position in
+                    handleCollectionHover(sourceUUID: sourceUUID, targetUUID: collection.uuid, position: position)
+                },
+                onCollectionDrop: { sourceUUID, position in
+                    handleCollectionDrop(sourceUUID: sourceUUID, targetUUID: collection.uuid, position: position)
+                }
+            )
+        )
+        .onDrag {
+            #if DEBUG
+            print("[CollectionReorder] drag begin uuid=\(collection.uuid) name=\(collection.name)")
+            print("[CollectionReorder] writing pasteboard type: \(InternalCollectionDrag.pasteboardTypeString)")
+            print("[CollectionReorder] payload uuid=\(collection.uuid)")
+            #endif
+            let provider = NSItemProvider(
+                item: InternalCollectionDrag.encode(collection.uuid).data(using: .utf8) as NSData?,
+                typeIdentifier: InternalCollectionDrag.pasteboardTypeString
+            )
+            provider.registerObject(InternalCollectionDrag.encodeTextFallback(collection.uuid) as NSString, visibility: .ownProcess)
+            provider.registerDataRepresentation(
+                forTypeIdentifier: InternalCollectionDrag.pasteboardTypeString,
+                visibility: .ownProcess
+            ) { completion in
+                #if DEBUG
+                print("[CollectionReorder] writing pasteboard type: \(InternalCollectionDrag.pasteboardTypeString)")
+                print("[CollectionReorder] payload uuid=\(collection.uuid)")
+                #endif
+                completion(InternalCollectionDrag.encode(collection.uuid).data(using: .utf8), nil)
+                return nil
+            }
+            return provider
+        }
+        .contextMenu {
+            Button("Rename Collection") {
+                #if DEBUG
+                print("[Sidebar] right click collection uuid=\(collection.uuid) name=\(collection.name) action=rename")
+                #endif
+                appState.beginRenameCollection(collection)
+            }
+            Button("Delete Collection", role: .destructive) {
+                #if DEBUG
+                print("[Sidebar] right click collection uuid=\(collection.uuid) name=\(collection.name) action=delete")
+                #endif
+                appState.beginDeleteCollection(collection)
+            }
+            Divider()
+            Button("Move Up") {
+                appState.moveCollectionUp(collection)
+            }
+            .disabled(!appState.canMoveCollectionUp(collection))
+            Button("Move Down") {
+                appState.moveCollectionDown(collection)
+            }
+            .disabled(!appState.canMoveCollectionDown(collection))
+            Divider()
+            Button("Add Selected Screenshots to Collection") {
+                #if DEBUG
+                print("[Sidebar] right click collection uuid=\(collection.uuid) name=\(collection.name) action=add-selected")
+                #endif
+                appState.addScreenshots(ids: Array(appState.selectedScreenshotIDs), toCollection: collection.uuid)
+            }
+            .disabled(appState.selectedScreenshotIDs.isEmpty)
+        }
+    }
+
+    @ViewBuilder
+    private func libraryContextMenu(for item: SidebarItem) -> some View {
+        switch item.selection {
+        case .trash:
+            Button("Open Trash") {
+                appState.sidebarSelection = .trash
+            }
+            Divider()
+            Button("Restore All") {
+                appState.router.restoreAllFromTrash()
+            }
+            .disabled(appState.trashCount == 0)
+            Button("Empty Trash", role: .destructive) {
+                appState.router.emptyTrash()
+            }
+            .disabled(appState.trashCount == 0)
+        case .inbox:
+            Button("Open Inbox") { appState.sidebarSelection = .inbox }
+        case .recent:
+            Button("Open Recent") { appState.sidebarSelection = .recent }
+        case .favorites:
+            Button("Open Favorites") { appState.sidebarSelection = .favorites }
+        case .untagged:
+            Button("Open Untagged") { appState.sidebarSelection = .untagged }
+        case .collection:
+            Button("Open Collection") { appState.sidebarSelection = item.selection }
+            Button("Export Collection…") {
+                appState.sidebarSelection = item.selection
+                appState.exportCurrentCollection()
+            }
+        case .smart:
+            EmptyView()
         }
     }
 
@@ -132,9 +277,36 @@ struct SidebarView: View {
         }
     }
 
+    private func handleCollectionDrop(
+        sourceUUID: String,
+        targetUUID: String,
+        position: SidebarCollectionDropPosition
+    ) {
+        #if DEBUG
+        print("[SidebarDrop] payload type collection ID source=\(sourceUUID) target=\(targetUUID)")
+        #endif
+        appState.commitCollectionReorder(sourceUUID: sourceUUID, targetUUID: targetUUID, position: position)
+    }
+
+    private func handleCollectionHover(
+        sourceUUID: String,
+        targetUUID: String,
+        position: SidebarCollectionDropPosition
+    ) {
+        switch position {
+        case .before:
+            appState.previewCollectionReorder(sourceUUID: sourceUUID, before: targetUUID)
+        case .after:
+            appState.previewCollectionReorder(sourceUUID: sourceUUID, after: targetUUID)
+        }
+    }
+
     private func handleInternalScreenshotDrop(_ ids: [UUID], on selection: SidebarSelection) {
         guard acceptsInternalScreenshotDrop(selection), !ids.isEmpty else { return }
         print("[SidebarDrop] drop received IDs: \(ids.map(\.uuidString))")
+        #if DEBUG
+        print("[SidebarDrop] payload type screenshot IDs")
+        #endif
         switch selection {
         case .favorites:
             print("[SidebarDrop] action called: favorite")
@@ -184,6 +356,36 @@ struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .help("New Collection")
+        }
+        .contextMenu {
+            Button("New Collection") {
+                appState.router.newCollection()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func smartContextMenu(for item: SidebarItem) -> some View {
+        switch item.selection {
+        case .smart(.ocrPending):
+            Button("Refresh Count") {
+                appState.refreshOCRState()
+            }
+            Button("Re-run OCR Pending") {
+                let pending = appState.allScreenshots.filter { !$0.isTrashed && !$0.isOCRComplete }
+                appState.rerunOCR(for: pending)
+            }
+            .disabled(appState.ocrPendingCount == 0)
+        case .smart(.duplicates):
+            Button("Rebuild Duplicate Index") {
+                appState.rebuildDuplicateIndex()
+            }
+        case .smart(.thisWeek):
+            Button("Show Criteria") {
+                appState.showToast("Shows screenshots created in the last 7 days", kind: .info)
+            }
+        default:
+            EmptyView()
         }
     }
 

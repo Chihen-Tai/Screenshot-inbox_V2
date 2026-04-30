@@ -199,4 +199,104 @@ extension Migration {
         try db.exec("CREATE INDEX IF NOT EXISTS idx_detected_codes_symbology ON detected_codes(symbology);")
         try db.exec("CREATE INDEX IF NOT EXISTS idx_detected_codes_is_url ON detected_codes(is_url);")
     }
+
+    static let imageHashesSchema = Migration(version: 6) { db in
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS image_hashes (
+            screenshot_uuid TEXT PRIMARY KEY,
+            algorithm TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (screenshot_uuid) REFERENCES screenshots(uuid) ON DELETE CASCADE
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_image_hashes_hash ON image_hashes(hash);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_image_hashes_algorithm ON image_hashes(algorithm);")
+    }
+
+    static let collectionSortIndexSchema = Migration(version: 7) { db in
+        if try !collectionTableHasColumn("sort_index", database: db) {
+            try db.exec("ALTER TABLE collections ADD COLUMN sort_index REAL NOT NULL DEFAULT 0;")
+        }
+
+        if try collectionSortIndexesNeedNormalization(database: db) {
+            let rows = try collectionIDsByCreatedAt(database: db)
+            let stmt = try db.prepare("UPDATE collections SET sort_index = ? WHERE id = ?;")
+            for (index, id) in rows.enumerated() {
+                stmt.reset()
+                try stmt.bind(1, Double(index))
+                try stmt.bind(2, id)
+                _ = try stmt.step()
+            }
+        }
+    }
+
+    static let organizationRulesSchema = Migration(version: 8) { db in
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS organization_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            priority INTEGER NOT NULL DEFAULT 0,
+            match_mode TEXT NOT NULL DEFAULT 'all',
+            conditions_json TEXT NOT NULL,
+            actions_json TEXT NOT NULL,
+            run_on_import INTEGER NOT NULL DEFAULT 1,
+            run_after_ocr INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_organization_rules_uuid ON organization_rules(uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_organization_rules_is_enabled ON organization_rules(is_enabled);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_organization_rules_priority ON organization_rules(priority);")
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS organization_rule_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_uuid TEXT NOT NULL,
+            screenshot_uuid TEXT NOT NULL,
+            actions_applied_json TEXT,
+            created_at TEXT NOT NULL
+        );
+        """)
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_organization_rule_runs_screenshot_uuid ON organization_rule_runs(screenshot_uuid);")
+        try db.exec("CREATE INDEX IF NOT EXISTS idx_organization_rule_runs_rule_uuid ON organization_rule_runs(rule_uuid);")
+    }
+
+    private static func collectionTableHasColumn(_ column: String, database: Database) throws -> Bool {
+        let stmt = try database.prepare("PRAGMA table_info(collections);")
+        while try stmt.step() {
+            if stmt.columnString(1) == column {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func collectionSortIndexesNeedNormalization(database: Database) throws -> Bool {
+        let stmt = try database.prepare("""
+        SELECT COUNT(*), COUNT(DISTINCT sort_index)
+        FROM collections
+        WHERE type = 'manual';
+        """)
+        guard try stmt.step() else { return false }
+        let total = Int(stmt.columnInt(0))
+        let distinct = Int(stmt.columnInt(1))
+        return total > 0 && total != distinct
+    }
+
+    private static func collectionIDsByCreatedAt(database: Database) throws -> [Int] {
+        let stmt = try database.prepare("""
+        SELECT id
+        FROM collections
+        WHERE type = 'manual'
+        ORDER BY created_at ASC, id ASC;
+        """)
+        var ids: [Int] = []
+        while try stmt.step() {
+            ids.append(Int(stmt.columnInt(0)))
+        }
+        return ids
+    }
 }

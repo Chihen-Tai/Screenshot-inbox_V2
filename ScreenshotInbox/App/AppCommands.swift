@@ -24,6 +24,19 @@ struct AppCommands: Commands {
             .keyboardShortcut(",", modifiers: [.command])
         }
 
+        CommandGroup(replacing: .undoRedo) {
+            Button(appState.undoMenuTitle) {
+                print("[AppCommands] Undo fired; firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
+                if AppKitFocusHelper.isTextInputFocused() {
+                    print("[AppCommands] forwarding undo to focused text")
+                    NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
+                    return
+                }
+                appState.performAppUndo()
+            }
+            .keyboardShortcut("z", modifiers: [.command])
+        }
+
         CommandGroup(replacing: .pasteboard) {
             Button("Cut") {
                 NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)

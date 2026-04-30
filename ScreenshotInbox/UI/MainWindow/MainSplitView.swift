@@ -13,15 +13,17 @@ struct MainSplitView: View {
     @State private var lastDebugSummary: String = ""
     @State private var sidebarDragStartWidth: CGFloat?
     @State private var inspectorDragStartWidth: CGFloat?
+    @State private var liveSidebarWidth: CGFloat?
+    @State private var liveInspectorWidth: CGFloat?
 
     var body: some View {
         GeometryReader { proxy in
-            let decision = LayoutDecision(
+            let decision = MainSplitLayoutDecision(
                 width: proxy.size.width,
                 sidebarUserVisible: appState.sidebarOverrideVisible,
                 inspectorUserVisible: appState.inspectorOverrideVisible,
-                preferredSidebarWidth: appState.sidebarPanelWidth,
-                preferredInspectorWidth: appState.inspectorPanelWidth
+                preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
+                preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
             )
 
             HStack(spacing: 0) {
@@ -32,11 +34,22 @@ struct MainSplitView: View {
                         accessibilityLabel: "Resize sidebar",
                         onDragChanged: { translation in
                             let start = sidebarDragStartWidth ?? decision.sidebarWidth
-                            sidebarDragStartWidth = start
-                            appState.sidebarPanelWidth = decision.clampedSidebarWidth(start + translation)
+                            if sidebarDragStartWidth == nil {
+                                sidebarDragStartWidth = start
+                                liveSidebarWidth = start
+                                logSplitResize("begin sidebar width=\(format(start)) gridWidth=\(format(decision.gridWidth))")
+                            }
+                            let width = decision.clampedSidebarWidth(start + translation)
+                            withTransaction(Transaction(animation: nil)) {
+                                liveSidebarWidth = width
+                            }
                         },
                         onDragEnded: {
+                            let finalWidth = liveSidebarWidth ?? decision.sidebarWidth
+                            appState.sidebarPanelWidth = finalWidth
+                            logSplitResize("end sidebar width=\(format(finalWidth)) gridWidth=\(format(decision.gridWidth))")
                             sidebarDragStartWidth = nil
+                            liveSidebarWidth = nil
                         }
                     )
                 }
@@ -49,11 +62,22 @@ struct MainSplitView: View {
                         accessibilityLabel: "Resize inspector",
                         onDragChanged: { translation in
                             let start = inspectorDragStartWidth ?? decision.inspectorWidth
-                            inspectorDragStartWidth = start
-                            appState.inspectorPanelWidth = decision.clampedInspectorWidth(start - translation)
+                            if inspectorDragStartWidth == nil {
+                                inspectorDragStartWidth = start
+                                liveInspectorWidth = start
+                                logSplitResize("begin inspector width=\(format(start)) gridWidth=\(format(decision.gridWidth))")
+                            }
+                            let width = decision.clampedInspectorWidth(start - translation)
+                            withTransaction(Transaction(animation: nil)) {
+                                liveInspectorWidth = width
+                            }
                         },
                         onDragEnded: {
+                            let finalWidth = liveInspectorWidth ?? decision.inspectorWidth
+                            appState.inspectorPanelWidth = finalWidth
+                            logSplitResize("end inspector width=\(format(finalWidth)) gridWidth=\(format(decision.gridWidth))")
                             inspectorDragStartWidth = nil
+                            liveInspectorWidth = nil
                         }
                     )
                     InspectorView()
@@ -68,48 +92,48 @@ struct MainSplitView: View {
             }
             .onChange(of: proxy.size.width) { _, newWidth in
                 updateMode(width: newWidth)
-                logLayout(LayoutDecision(
+                logLayout(MainSplitLayoutDecision(
                     width: newWidth,
                     sidebarUserVisible: appState.sidebarOverrideVisible,
                     inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: appState.sidebarPanelWidth,
-                    preferredInspectorWidth: appState.inspectorPanelWidth
+                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
+                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
                 ))
             }
             .onChange(of: appState.sidebarOverrideVisible) { _, _ in
-                logLayout(LayoutDecision(
+                logLayout(MainSplitLayoutDecision(
                     width: proxy.size.width,
                     sidebarUserVisible: appState.sidebarOverrideVisible,
                     inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: appState.sidebarPanelWidth,
-                    preferredInspectorWidth: appState.inspectorPanelWidth
+                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
+                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
                 ))
             }
             .onChange(of: appState.inspectorOverrideVisible) { _, _ in
-                logLayout(LayoutDecision(
+                logLayout(MainSplitLayoutDecision(
                     width: proxy.size.width,
                     sidebarUserVisible: appState.sidebarOverrideVisible,
                     inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: appState.sidebarPanelWidth,
-                    preferredInspectorWidth: appState.inspectorPanelWidth
+                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
+                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
                 ))
             }
             .onChange(of: appState.sidebarPanelWidth) { _, _ in
-                logLayout(LayoutDecision(
+                logLayout(MainSplitLayoutDecision(
                     width: proxy.size.width,
                     sidebarUserVisible: appState.sidebarOverrideVisible,
                     inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: appState.sidebarPanelWidth,
-                    preferredInspectorWidth: appState.inspectorPanelWidth
+                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
+                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
                 ))
             }
             .onChange(of: appState.inspectorPanelWidth) { _, _ in
-                logLayout(LayoutDecision(
+                logLayout(MainSplitLayoutDecision(
                     width: proxy.size.width,
                     sidebarUserVisible: appState.sidebarOverrideVisible,
                     inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: appState.sidebarPanelWidth,
-                    preferredInspectorWidth: appState.inspectorPanelWidth
+                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
+                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
                 ))
             }
         }
@@ -123,7 +147,7 @@ struct MainSplitView: View {
         }
     }
 
-    private func logLayout(_ decision: LayoutDecision) {
+    private func logLayout(_ decision: MainSplitLayoutDecision) {
         #if DEBUG
         let summary = decision.debugSummary
         if summary != lastDebugSummary {
@@ -132,11 +156,23 @@ struct MainSplitView: View {
         }
         #endif
     }
+
+    private func logSplitResize(_ message: String) {
+        #if DEBUG
+        print("[SplitResize] \(message)")
+        #endif
+    }
+
+    private func format(_ value: CGFloat) -> String {
+        guard value.isFinite else { return "invalid" }
+        return String(format: "%.0f", Double(value))
+    }
 }
 
-private struct LayoutDecision {
+struct MainSplitLayoutDecision {
     let width: CGFloat
     let mode: Theme.LayoutMode
+    let sidebarUserVisible: Bool
     let sidebarVisible: Bool
     let sidebarWidth: CGFloat
     let inspectorUserVisible: Bool
@@ -155,16 +191,17 @@ private struct LayoutDecision {
     ) {
         self.width = max(0, width)
         self.mode = Theme.LayoutMode.from(width: width)
+        self.sidebarUserVisible = sidebarUserVisible
         self.inspectorUserVisible = inspectorUserVisible
 
-        let gridMin = LayoutDecision.gridMinimum(for: mode)
+        let gridMin = MainSplitLayoutDecision.gridMinimum(for: mode)
         let dividerWidth = Theme.Layout.splitDividerWidth
         self.gridMin = gridMin
         self.dividerWidth = dividerWidth
 
         let wantsSidebar = sidebarUserVisible
         let sidebarCanFitAtMinimum = width - Theme.Layout.sidebarMin - dividerWidth >= gridMin
-        self.sidebarVisible = wantsSidebar && sidebarCanFitAtMinimum
+        self.sidebarVisible = wantsSidebar && mode != .compact && sidebarCanFitAtMinimum
 
         let sidebarMinimumBudget = sidebarVisible ? Theme.Layout.sidebarMin + dividerWidth : 0
         let wantsInspector = inspectorUserVisible && mode != .compact
@@ -176,7 +213,7 @@ private struct LayoutDecision {
             - (sidebarVisible ? dividerWidth : 0)
             - (inspectorVisible ? Theme.Layout.inspectorMin + dividerWidth : 0)
         self.sidebarWidth = sidebarVisible
-            ? LayoutDecision.clamp(
+            ? MainSplitLayoutDecision.clamp(
                 preferredSidebarWidth,
                 min: Theme.Layout.sidebarMin,
                 max: min(Theme.Layout.sidebarMax, sidebarMaxForLayout)
@@ -188,7 +225,7 @@ private struct LayoutDecision {
             - (sidebarVisible ? self.sidebarWidth + dividerWidth : 0)
             - (inspectorVisible ? dividerWidth : 0)
         self.inspectorWidth = inspectorVisible
-            ? LayoutDecision.clamp(
+            ? MainSplitLayoutDecision.clamp(
                 preferredInspectorWidth,
                 min: Theme.Layout.inspectorMin,
                 max: min(Theme.Layout.inspectorMax, inspectorMaxForLayout)
@@ -205,7 +242,7 @@ private struct LayoutDecision {
     }
 
     var debugSummary: String {
-        "width=\(format(width)) mode=\(mode) sidebar=\(sidebarVisible) sidebarWidth=\(format(sidebarWidth)) inspectorUser=\(inspectorUserVisible) inspectorEffective=\(inspectorVisible) inspectorWidth=\(format(inspectorWidth)) gridWidth=\(format(gridWidth))"
+        "windowWidth=\(format(width)) mode=\(mode) userSidebarVisible=\(sidebarUserVisible) effectiveSidebarVisible=\(sidebarVisible) sidebarWidth=\(format(sidebarWidth)) userInspectorVisible=\(inspectorUserVisible) effectiveInspectorVisible=\(inspectorVisible) inspectorWidth=\(format(inspectorWidth)) gridWidth=\(format(gridWidth))"
     }
 
     func clampedSidebarWidth(_ proposed: CGFloat) -> CGFloat {
@@ -251,21 +288,33 @@ private struct SplitDivider: View {
     let onDragChanged: (CGFloat) -> Void
     let onDragEnded: () -> Void
     @State private var isHovering = false
+    @State private var cursorPushed = false
     @GestureState private var isDragging = false
 
     var body: some View {
-        Rectangle()
-            .fill((isHovering || isDragging) ? Theme.Palette.accent.opacity(0.45) : Theme.SemanticColor.divider)
-            .frame(width: Theme.Layout.splitDividerVisibleWidth)
+        Color.clear
             .frame(width: Theme.Layout.splitDividerWidth)
+            .overlay {
+                Rectangle()
+                    .fill((isHovering || isDragging) ? Theme.Palette.accent.opacity(0.45) : Theme.SemanticColor.divider)
+                    .frame(width: Theme.Layout.splitDividerVisibleWidth)
+            }
             .contentShape(Rectangle())
             .accessibilityLabel(accessibilityLabel)
             .onHover { hovering in
                 isHovering = hovering
-                if hovering {
+                if hovering, !cursorPushed {
                     NSCursor.resizeLeftRight.push()
-                } else {
+                    cursorPushed = true
+                } else if !hovering, cursorPushed {
                     NSCursor.pop()
+                    cursorPushed = false
+                }
+            }
+            .onDisappear {
+                if cursorPushed {
+                    NSCursor.pop()
+                    cursorPushed = false
                 }
             }
             .gesture(

@@ -58,6 +58,23 @@ final class ScreenshotRepository {
         }
     }
 
+    func fetchExactDuplicateGroups(includeTrashed: Bool = false) throws -> [DuplicateGroup] {
+        let screenshots = try fetchAll(includeTrashed: includeTrashed)
+        return DuplicateDetectionService.findDuplicateGroups(
+            screenshots: screenshots,
+            imageHashes: [:],
+            includeTrashed: includeTrashed
+        ).filter { $0.kind == .exact }
+    }
+
+    func fetchDuplicateCount(includeTrashed: Bool = false) throws -> Int {
+        try fetchExactDuplicateGroups(includeTrashed: includeTrashed)
+            .reduce(into: Set<String>()) { ids, group in
+                ids.formUnion(group.screenshotUUIDs)
+            }
+            .count
+    }
+
     private func fetchWhere(_ clause: String) throws -> [Screenshot] {
         guard let database else { return [] }
         return try database.queue.sync {
@@ -163,13 +180,82 @@ final class ScreenshotRepository {
         try markTrashed(ids: ids, trashed: false)
     }
 
-    func delete(uuid: UUID) throws {
+    func restoreFromTrash(ids: [String]) throws {
+        try restoreFromTrash(ids: ids.compactMap(UUID.init(uuidString:)))
+    }
+
+    func restoreAllFromTrash() throws {
+        let ids = try fetchTrashed().map(\.id)
+        try restoreFromTrash(ids: ids)
+    }
+
+    func emptyTrash() throws {
+        let ids = try fetchTrashed().map(\.uuidString)
+        try permanentlyDelete(ids: ids)
+    }
+
+    func permanentlyDelete(ids: [String]) throws {
         guard let database else { return }
+        let requestedIDs = ids.map { $0.lowercased() }
+        guard !requestedIDs.isEmpty else { return }
+        let trashedIDs = try database.queue.sync {
+            try fetchTrashedUUIDs(matching: requestedIDs, database: database)
+        }
+        try delete(uuids: trashedIDs.compactMap(UUID.init(uuidString:)))
+    }
+
+    func delete(uuid: UUID) throws {
+        try delete(uuids: [uuid])
+    }
+
+    func delete(uuids: [UUID]) throws {
+        guard let database else { return }
+        let ids = uuids.map { $0.uuidString.lowercased() }
+        guard !ids.isEmpty else { return }
         try database.queue.sync {
-            let stmt = try database.prepare("DELETE FROM screenshots WHERE uuid = ?;")
-            try stmt.bind(1, uuid.uuidString.lowercased())
+            try database.transaction {
+                for table in ["collection_items", "screenshot_tags", "ocr_results", "detected_codes", "image_hashes"] {
+                    try deleteRows(from: table, screenshotUUIDs: ids, database: database)
+                }
+                let stmt = try database.prepare("DELETE FROM screenshots WHERE uuid = ?;")
+                for uuid in ids {
+                    stmt.reset()
+                    try stmt.bind(1, uuid)
+                    _ = try stmt.step()
+                }
+            }
+        }
+    }
+
+    private func deleteRows(from table: String, screenshotUUIDs: [String], database: Database) throws {
+        guard try tableExists(table, database: database) else { return }
+        let stmt = try database.prepare("DELETE FROM \(table) WHERE screenshot_uuid = ?;")
+        for uuid in screenshotUUIDs {
+            stmt.reset()
+            try stmt.bind(1, uuid)
             _ = try stmt.step()
         }
+    }
+
+    private func fetchTrashedUUIDs(matching ids: [String], database: Database) throws -> [String] {
+        let stmt = try database.prepare("SELECT uuid FROM screenshots WHERE uuid = ? AND is_trashed = 1;")
+        var trashedIDs: [String] = []
+        for uuid in ids {
+            stmt.reset()
+            try stmt.bind(1, uuid)
+            while try stmt.step() {
+                if let matched = stmt.columnString(0) {
+                    trashedIDs.append(matched)
+                }
+            }
+        }
+        return trashedIDs
+    }
+
+    private func tableExists(_ name: String, database: Database) throws -> Bool {
+        let stmt = try database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;")
+        try stmt.bind(1, name)
+        return try stmt.step()
     }
 
     // MARK: - Row mapping

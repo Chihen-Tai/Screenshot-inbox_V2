@@ -26,9 +26,8 @@ struct ActionsSectionView: View {
                     rowDivider
                     ActionRow(title: "Delete Permanently",
                               systemImage: "trash.slash",
-                              isDestructive: true,
-                              isEnabled: false) {
-                        appState.router.deletePermanentlyPlaceholder([screenshot])
+                              isDestructive: true) {
+                        appState.router.deletePermanently([screenshot])
                     }
                 } else {
                     ActionRow(title: screenshot.isFavorite ? "Remove from Favorites" : "Add to Favorites",
@@ -59,6 +58,16 @@ struct ActionsSectionView: View {
                     ActionRow(title: "Export as PDF",
                               systemImage: "doc.richtext") {
                         appState.router.mergeIntoPDF([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Export Original",
+                              systemImage: "square.and.arrow.up") {
+                        appState.router.exportOriginals([screenshot])
+                    }
+                    rowDivider
+                    ActionRow(title: "Copy Image",
+                              systemImage: "doc.on.clipboard") {
+                        appState.router.copyImage([screenshot])
                     }
                     rowDivider
                     ActionRow(title: "Move to Trash",

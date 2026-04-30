@@ -13,14 +13,18 @@ final class CollectionRepository {
     }
 
     func createCollection(name: String) throws -> ScreenshotCollection {
+        let normalized = try validateName(name)
         guard let database else {
-            return ScreenshotCollection(id: nil, uuid: UUID().uuidString.lowercased(), name: name, type: "manual", sortIndex: 0, createdAt: Date(), updatedAt: nil)
+            return ScreenshotCollection(id: nil, uuid: UUID().uuidString.lowercased(), name: normalized, type: "manual", sortIndex: 0, createdAt: Date(), updatedAt: nil)
+        }
+        if try collectionNameExists(normalized, excludingUUID: nil) {
+            throw CollectionRepositoryError.duplicateName
         }
         let now = Date()
         let collection = ScreenshotCollection(
             id: nil,
             uuid: UUID().uuidString.lowercased(),
-            name: name,
+            name: normalized,
             type: "manual",
             sortIndex: now.timeIntervalSince1970,
             createdAt: now,
@@ -43,7 +47,7 @@ final class CollectionRepository {
             let stmt = try database.prepare("""
             SELECT id, uuid, name, type, sort_index, created_at, updated_at
             FROM collections
-            ORDER BY sort_index ASC, name COLLATE NOCASE ASC;
+            ORDER BY sort_index ASC, created_at ASC;
             """)
             var rows: [ScreenshotCollection] = []
             while try stmt.step() { rows.append(row(from: stmt)) }
@@ -64,10 +68,14 @@ final class CollectionRepository {
     }
 
     func renameCollection(uuid: String, name: String) throws {
+        let normalized = try validateName(name)
         guard let database else { return }
+        if try collectionNameExists(normalized, excludingUUID: uuid) {
+            throw CollectionRepositoryError.duplicateName
+        }
         try database.queue.sync {
             let stmt = try database.prepare("UPDATE collections SET name = ?, updated_at = ? WHERE uuid = ?;")
-            try stmt.bind(1, name)
+            try stmt.bind(1, normalized)
             try stmt.bind(2, dateFormatter.string(from: Date()))
             try stmt.bind(3, uuid)
             _ = try stmt.step()
@@ -81,6 +89,27 @@ final class CollectionRepository {
             try stmt.bind(1, uuid)
             _ = try stmt.step()
         }
+    }
+
+    func updateSortOrder(collectionUUIDsInOrder: [String]) throws {
+        guard let database, !collectionUUIDsInOrder.isEmpty else { return }
+        try database.queue.sync {
+            try database.transaction {
+                let stmt = try database.prepare("UPDATE collections SET sort_index = ?, updated_at = ? WHERE uuid = ? AND type = 'manual';")
+                let now = dateFormatter.string(from: Date())
+                for (index, uuid) in collectionUUIDsInOrder.enumerated() {
+                    stmt.reset()
+                    try stmt.bind(1, Double(index))
+                    try stmt.bind(2, now)
+                    try stmt.bind(3, uuid)
+                    _ = try stmt.step()
+                }
+            }
+        }
+    }
+
+    func reorderCollections(uuidsInOrder: [String]) throws {
+        try updateSortOrder(collectionUUIDsInOrder: uuidsInOrder)
     }
 
     func addScreenshots(_ screenshotUUIDs: [String], toCollection collectionUUID: String) throws {
@@ -203,4 +232,31 @@ final class CollectionRepository {
         try stmt.bind(1, uuid)
         return try stmt.step() ? Int(stmt.columnInt(0)) : nil
     }
+
+    private func validateName(_ name: String) throws -> String {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { throw CollectionRepositoryError.emptyName }
+        return normalized
+    }
+
+    private func collectionNameExists(_ name: String, excludingUUID: String?) throws -> Bool {
+        guard let database else { return false }
+        return try database.queue.sync {
+            let stmt = try database.prepare("""
+            SELECT uuid FROM collections
+            WHERE name = ? COLLATE NOCASE
+            LIMIT 1;
+            """)
+            try stmt.bind(1, name)
+            guard try stmt.step(), let existingUUID = stmt.columnString(0) else {
+                return false
+            }
+            return existingUUID != excludingUUID
+        }
+    }
+}
+
+enum CollectionRepositoryError: Error, Equatable {
+    case emptyName
+    case duplicateName
 }

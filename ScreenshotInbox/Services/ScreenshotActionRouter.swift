@@ -34,7 +34,7 @@ final class ScreenshotActionRouter {
     @discardableResult
     func syncSelectionForContextMenu(rightClickedID: UUID?) -> [Screenshot] {
         if let id = rightClickedID, !appState.selectedScreenshotIDs.contains(id) {
-            appState.selection.replace(with: id)
+            appState.replaceSelection(with: id, source: "mouse")
         }
         return appState.selectedScreenshots
     }
@@ -55,7 +55,7 @@ final class ScreenshotActionRouter {
     func quickLook(_ shots: [Screenshot]) {
         log("quickLook", shots)
         guard let first = shots.first else { return }
-        appState.beginPreview(of: first)
+        appState.beginPreview(startingAt: first, navigationShots: shots.count > 1 ? shots : nil)
     }
 
     func revealInFinder(_ shots: [Screenshot]) {
@@ -100,8 +100,62 @@ final class ScreenshotActionRouter {
 
     func copyImage(_ shots: [Screenshot]) {
         log("copyImage", shots)
-        appState.showToast("Copy Image is coming in a later phase",
-                           kind: .comingSoon)
+        let count = appState.exportShareService.copyImages(shots)
+        guard count > 0 else {
+            appState.showToast("No image files available", kind: .info)
+            return
+        }
+        appState.showToast("Copied \(count) image\(count == 1 ? "" : "s")", kind: .success)
+    }
+
+    func copyFiles(_ shots: [Screenshot]) {
+        log("copyFiles", shots)
+        let count = appState.exportShareService.copyFiles(shots)
+        guard count > 0 else {
+            appState.showToast("No files available", kind: .info)
+            return
+        }
+        appState.showToast("Copied \(count) file\(count == 1 ? "" : "s")", kind: .success)
+    }
+
+    func copyFilePaths(_ shots: [Screenshot]) {
+        log("copyFilePaths", shots)
+        let count = appState.exportShareService.copyFilePaths(shots)
+        guard count > 0 else {
+            appState.showToast("No file paths available", kind: .info)
+            return
+        }
+        appState.showToast("Copied \(count) file path\(count == 1 ? "" : "s")", kind: .success)
+    }
+
+    func copyMarkdownReference(_ shots: [Screenshot]) {
+        log("copyMarkdownReference", shots)
+        let count = appState.exportShareService.copyMarkdownReference(shots)
+        guard count > 0 else {
+            appState.showToast("No files available", kind: .info)
+            return
+        }
+        appState.showToast("Copied Markdown reference", kind: .success)
+    }
+
+    func exportOriginals(_ shots: [Screenshot]) {
+        log("exportOriginals", shots)
+        appState.exportOriginals(shots)
+    }
+
+    func exportOCRMarkdown(_ shots: [Screenshot]) {
+        log("exportOCRMarkdown", shots)
+        appState.exportOCRText(shots, format: .markdown)
+    }
+
+    func exportOCRText(_ shots: [Screenshot]) {
+        log("exportOCRText", shots)
+        appState.exportOCRText(shots, format: .txt)
+    }
+
+    func share(_ shots: [Screenshot]) {
+        log("share", shots)
+        appState.shareFiles(shots)
     }
 
     func copyOCRText(_ shots: [Screenshot]) {
@@ -123,6 +177,15 @@ final class ScreenshotActionRouter {
         let suffix = n == 1 ? "" : "s"
         appState.showToast("Copied OCR text from \(n) screenshot\(suffix)",
                            kind: .success)
+    }
+
+    func viewOCRText(_ shots: [Screenshot]) {
+        log("viewOCRText", shots)
+        guard let shot = shots.first else {
+            appState.showToast("OCR text is not available yet", kind: .info)
+            return
+        }
+        appState.beginOCRTextViewer(for: shot)
     }
 
     func rerunOCR(_ shots: [Screenshot]) {
@@ -178,14 +241,24 @@ final class ScreenshotActionRouter {
         appState.showToast("Restored \(n) screenshot\(suffix)", kind: .success)
     }
 
-    func deletePermanentlyPlaceholder(_ shots: [Screenshot]) {
-        log("deletePermanentlyPlaceholder", shots)
-        appState.showToast("Permanent delete is coming in a later phase", kind: .comingSoon)
+    func restoreAllFromTrash() {
+        print("[Router] restoreAllFromTrash")
+        appState.restoreAllFromTrash()
+    }
+
+    func deletePermanently(_ shots: [Screenshot]) {
+        log("deletePermanently", shots)
+        appState.beginPermanentDelete(ids: shots.map(\.id))
+    }
+
+    func emptyTrash() {
+        print("[Router] emptyTrash")
+        appState.beginEmptyTrash()
     }
 
     func handleDeleteKey(_ shots: [Screenshot]) {
         if appState.sidebarSelection == .trash {
-            deletePermanentlyPlaceholder(shots)
+            deletePermanently(shots)
         } else {
             moveToTrash(shots)
         }

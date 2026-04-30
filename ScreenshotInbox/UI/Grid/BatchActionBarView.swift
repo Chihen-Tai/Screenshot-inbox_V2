@@ -25,6 +25,13 @@ struct BatchActionBarView: View {
                     BatchButton(title: "Restore",
                                 systemImage: "arrow.uturn.backward",
                                 action: { appState.router.restoreFromTrash(appState.selectedScreenshots) })
+                    BatchButton(title: isCompact ? "Delete" : "Delete Permanently",
+                                systemImage: "trash.slash",
+                                style: .destructive,
+                                action: { appState.router.deletePermanently(appState.selectedScreenshots) })
+                    BatchButton(title: isCompact ? "Clear" : "Clear Selection",
+                                systemImage: "xmark.circle",
+                                action: { appState.router.clearSelection() })
                 } else {
                     BatchButton(title: isCompact ? "Fav" : "Favorite",
                                 systemImage: "star",
@@ -38,6 +45,9 @@ struct BatchActionBarView: View {
                     BatchButton(title: isCompact ? "PDF" : "Merge PDF",
                                 systemImage: "doc.on.doc",
                                 action: { appState.router.mergeIntoPDF(appState.selectedScreenshots) })
+                    BatchButton(title: isCompact ? "Export" : "Export Originals",
+                                systemImage: "square.and.arrow.up",
+                                action: { appState.router.exportOriginals(appState.selectedScreenshots) })
                     BatchButton(title: "Trash",
                                 systemImage: "trash",
                                 style: .destructive,

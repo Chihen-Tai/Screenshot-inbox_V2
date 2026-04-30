@@ -63,7 +63,7 @@ struct CollectionPickerSheet: View {
             }
             HStack {
                 Button {
-                    appState.createNewCollection()
+                    appState.createNewCollection(promptForName: false)
                 } label: {
                     Label("New Collection", systemImage: "plus")
                 }
@@ -71,6 +71,30 @@ struct CollectionPickerSheet: View {
                 Spacer()
                 Button("Cancel") { appState.cancelCollectionPicker() }
                     .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
+    }
+}
+
+struct CollectionRenameSheet: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Rename Collection")
+                .font(.system(size: 17, weight: .semibold))
+            TextField("Collection name", text: $appState.pendingCollectionName)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { appState.commitCollectionRename() }
+            HStack {
+                Spacer()
+                Button("Cancel") { appState.cancelCollectionRename() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Rename") { appState.commitCollectionRename() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(appState.pendingCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(20)

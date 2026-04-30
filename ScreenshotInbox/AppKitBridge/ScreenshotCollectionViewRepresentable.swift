@@ -18,6 +18,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     let layoutMode: Theme.LayoutMode
     let thumbnailProvider: MacThumbnailProvider?
     let onClick: (UUID, NSEvent.ModifierFlags) -> Void
+    let onSelectionSnapshot: (Set<UUID>, String) -> Void
     let onDoubleClick: (UUID) -> Void
     let onBackgroundClick: () -> Void
     let onSelectAll: () -> Void
@@ -45,6 +46,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
 
     private func wireCallbacks(_ vc: ScreenshotCollectionViewController) {
         vc.onItemClick = onClick
+        vc.onSelectionSnapshot = onSelectionSnapshot
         vc.onItemDoubleClick = onDoubleClick
         vc.onBackgroundClick = onBackgroundClick
         vc.onSelectAll = onSelectAll

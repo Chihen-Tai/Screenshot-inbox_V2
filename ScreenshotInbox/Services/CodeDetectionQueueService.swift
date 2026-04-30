@@ -10,6 +10,7 @@ final class CodeDetectionQueueService {
     private var runningIDs: Set<String> = []
     private var isRunning = false
     private var onUpdate: (@MainActor () -> Void)?
+    private var onComplete: (@MainActor (String) -> Void)?
 
     init(
         repository: DetectedCodeRepository,
@@ -21,8 +22,13 @@ final class CodeDetectionQueueService {
         self.detectionService = detectionService
     }
 
-    func start(screenshots: [Screenshot], onUpdate: @escaping @MainActor () -> Void) {
+    func start(
+        screenshots: [Screenshot],
+        onUpdate: @escaping @MainActor () -> Void,
+        onComplete: (@MainActor (String) -> Void)? = nil
+    ) {
         self.onUpdate = onUpdate
+        self.onComplete = onComplete
         enqueue(screenshots)
     }
 
@@ -97,6 +103,7 @@ final class CodeDetectionQueueService {
             #if DEBUG
             print("[CodeDetection] complete \(uuid) codes=\(codes.count)")
             #endif
+            onComplete?(uuid)
         } catch {
             print("[CodeDetection] failed \(uuid): \(error)")
         }

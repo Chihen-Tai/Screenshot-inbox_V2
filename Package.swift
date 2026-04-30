@@ -11,7 +11,17 @@ let package = Package(
         .executableTarget(
             name: "ScreenshotInbox",
             path: "ScreenshotInbox",
-            exclude: ["Resources"]
+            resources: [
+                .process("Resources")
+            ],
+            linkerSettings: [
+                // libsqlite3 ships with macOS; we use the C API via `import SQLite3`.
+                .linkedLibrary("sqlite3")
+            ]
+        ),
+        .testTarget(
+            name: "ScreenshotInboxTests",
+            dependencies: ["ScreenshotInbox"]
         )
     ]
 )

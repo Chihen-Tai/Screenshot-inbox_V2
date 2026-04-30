@@ -32,36 +32,65 @@ final class ImportService: ScreenshotImporting {
     // MARK: - ScreenshotImporting
 
     func importURLs(_ urls: [URL]) async -> ImportResult {
+        await importURLs(urls, conflictResolver: SkipImportConflictResolver())
+    }
+
+    func importURLs(
+        _ urls: [URL],
+        conflictResolver: ImportConflictResolving
+    ) async -> ImportResult {
         await Task.detached(priority: .userInitiated) { [self] in
             var result = ImportResult()
+            var pendingConflicts: [(url: URL, hash: String, existing: Screenshot, conflict: ImportConflict)] = []
             for url in urls {
                 do {
-                    if let imported = try self.importOne(url: url) {
-                        result.imported.append(imported)
+                    let hash = try FileHash.sha256Hex(of: url)
+                    if let existing = try repository.findByHash(hash) {
+                        let conflict = self.makeConflict(url: url, hash: hash, existing: existing)
+                        pendingConflicts.append((url, hash, existing, conflict))
+                        result.conflicts.append(conflict)
                     } else {
-                        result.duplicates += 1
+                        result.imported.append(try self.importOne(url: url, hash: hash, forcedName: nil))
                     }
                 } catch {
                     print("[Import] failure: \(url.lastPathComponent) — \(error)")
                     result.failures.append((url, error))
                 }
             }
+            if !pendingConflicts.isEmpty {
+                let decisions = await conflictResolver.resolve(conflicts: pendingConflicts.map(\.conflict))
+                let resolutionByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.conflict.id, $0.resolution) })
+                for pending in pendingConflicts {
+                    do {
+                        switch resolutionByID[pending.conflict.id] ?? .skip {
+                        case .skip:
+                            result.duplicates += 1
+                        case .keepBoth:
+                            let name = try self.uniqueDisplayName(for: pending.url.lastPathComponent)
+                            let imported = try self.importOne(url: pending.url, hash: pending.hash, forcedName: name)
+                            result.imported.append(imported)
+                            result.keptDuplicateCopies += 1
+                        case .replaceExisting:
+                            let replaced = try self.replace(existing: pending.existing, with: pending.url, hash: pending.hash)
+                            result.replaced.append(replaced)
+                        }
+                    } catch {
+                        print("[Import] conflict resolution failure: \(pending.url.lastPathComponent) — \(error)")
+                        result.failures.append((pending.url, error))
+                    }
+                }
+            }
             print("[Import] done: imported=\(result.imported.count) " +
-                  "duplicates=\(result.duplicates) failures=\(result.failures.count)")
+                  "duplicates=\(result.duplicates) keptDuplicates=\(result.keptDuplicateCopies) replaced=\(result.replaced.count) failures=\(result.failures.count)")
             return result
         }.value
     }
 
     // MARK: - Pipeline
 
-    /// Returns `nil` when the file's hash already exists in the repository.
-    private func importOne(url: URL) throws -> Screenshot? {
-        let hash = try FileHash.sha256Hex(of: url)
-        if let existing = try repository.findByHash(hash) {
-            print("[Import] dedupe hit \(url.lastPathComponent) → \(existing.uuidString)")
-            return nil
-        }
-
+    /// Imports a file as a new screenshot row. Duplicate policy is handled by
+    /// `importURLs(_:conflictResolver:)` before this method is called.
+    private func importOne(url: URL, hash: String, forcedName: String?) throws -> Screenshot {
         let metadata = try metadataReader.read(from: url)
         let uuid = UUID()
         let ext = url.pathExtension.isEmpty
@@ -88,7 +117,7 @@ final class ImportService: ScreenshotImporting {
 
         let shot = Screenshot(
             id: uuid,
-            name: url.lastPathComponent,
+            name: forcedName ?? url.lastPathComponent,
             createdAt: metadata.createdAt,
             pixelWidth: metadata.width,
             pixelHeight: metadata.height,
@@ -104,7 +133,7 @@ final class ImportService: ScreenshotImporting {
             fileHash: hash,
             importedAt: now,
             modifiedAt: now,
-            sourceApp: nil,
+            sourceApp: url.deletingLastPathComponent().path,
             sortIndex: 0,
             trashDate: nil
         )
@@ -118,6 +147,83 @@ final class ImportService: ScreenshotImporting {
             throw error
         }
         return shot
+    }
+
+    private func replace(existing: Screenshot, with url: URL, hash: String) throws -> Screenshot {
+        let metadata = try metadataReader.read(from: url)
+        let ext = url.pathExtension.isEmpty
+            ? defaultExtension(for: metadata.format)
+            : url.pathExtension
+        let originalURL = managedOriginalURL(for: existing)
+            ?? libraryRelativeURL(for: existing, extension: ext)
+        try FileManager.default.createDirectory(
+            at: originalURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try copyOriginal(from: url, to: originalURL)
+        do {
+            try thumbnailService.writeThumbnails(from: originalURL, uuid: existing.id)
+        } catch {
+            print("[Import] thumbnail regeneration failed for \(existing.uuidString): \(error)")
+        }
+        var updated = existing
+        updated.name = url.lastPathComponent
+        updated.createdAt = metadata.createdAt
+        updated.pixelWidth = metadata.width
+        updated.pixelHeight = metadata.height
+        updated.byteSize = metadata.byteSize
+        updated.format = metadata.format
+        updated.fileHash = hash
+        updated.libraryPath = libraryRelativePath(for: originalURL)
+        updated.modifiedAt = Date()
+        updated.sourceApp = url.deletingLastPathComponent().path
+        try repository.update(updated)
+        return updated
+    }
+
+    private func makeConflict(url: URL, hash: String, existing: Screenshot) -> ImportConflict {
+        ImportConflict(
+            incomingPath: url.path,
+            incomingFilename: url.lastPathComponent,
+            incomingFileHash: hash,
+            existingScreenshotUUID: existing.uuidString,
+            existingFilename: existing.name,
+            existingLibraryPath: existing.libraryPath,
+            existingOriginalPath: managedOriginalURL(for: existing)?.path,
+            existingCreatedAt: existing.createdAt,
+            reason: .exactDuplicateHash
+        )
+    }
+
+    private func uniqueDisplayName(for filename: String) throws -> String {
+        let existingNames = Set(try repository.fetchAll(includeTrashed: true).map { $0.name.lowercased() })
+        guard existingNames.contains(filename.lowercased()) else { return filename }
+        let url = URL(fileURLWithPath: filename)
+        let ext = url.pathExtension
+        let stem = ext.isEmpty ? filename : String(filename.dropLast(ext.count + 1))
+        var index = 2
+        while true {
+            let candidate = ext.isEmpty ? "\(stem) \(index)" : "\(stem) \(index).\(ext)"
+            if !existingNames.contains(candidate.lowercased()) {
+                return candidate
+            }
+            index += 1
+        }
+    }
+
+    private func managedOriginalURL(for screenshot: Screenshot) -> URL? {
+        guard let libraryPath = screenshot.libraryPath, !libraryPath.isEmpty else { return nil }
+        if libraryPath.hasPrefix("/") {
+            return URL(fileURLWithPath: libraryPath)
+        }
+        return library.libraryRootURL.appendingPathComponent(libraryPath)
+    }
+
+    private func libraryRelativeURL(for screenshot: Screenshot, extension ext: String) -> URL {
+        let date = screenshot.importedAt ?? screenshot.createdAt
+        let folder = try? library.originalsFolder(for: date)
+        return (folder ?? library.libraryRootURL)
+            .appendingPathComponent("\(screenshot.uuidString).\(ext)")
     }
 
     private func copyOriginal(from source: URL, to destination: URL) throws {

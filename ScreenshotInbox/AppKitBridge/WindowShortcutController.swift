@@ -20,6 +20,8 @@ final class WindowShortcutController {
     var onTrash: (() -> Void)?
     /// Phase 5 — Space (keyCode 49). Toggles preview overlay.
     var onPreview: (() -> Void)?
+    var onPreviewPrevious: (() -> Bool)?
+    var onPreviewNext: (() -> Bool)?
     /// Phase 5 — Return / Enter (keyCode 36). Opens rename sheet.
     var onRename: (() -> Void)?
 
@@ -108,6 +110,16 @@ final class WindowShortcutController {
         if isPlainKey, event.keyCode == 49 {
             print("[Shortcut] Space detected, calling onPreview")
             onPreview?()
+            return nil
+        }
+
+        if isPlainKey, event.keyCode == 123, onPreviewPrevious?() == true {
+            print("[Shortcut] Left arrow preview navigation")
+            return nil
+        }
+
+        if isPlainKey, event.keyCode == 124, onPreviewNext?() == true {
+            print("[Shortcut] Right arrow preview navigation")
             return nil
         }
 

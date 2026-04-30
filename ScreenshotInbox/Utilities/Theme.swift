@@ -35,25 +35,31 @@ enum Theme {
         // MARK: Layout-mode breakpoints
         /// At/above this width the full 3-column layout shows.
         static let regularBreakpoint: CGFloat = 1100
-        /// At/above this width sidebar + grid are visible (inspector hidden).
-        /// Below it, only the grid is shown.
-        static let mediumBreakpoint: CGFloat = 800
+        /// At/above this width sidebar + grid can be visible.
+        /// Below it, the grid gets priority and side panes auto-hide.
+        static let mediumBreakpoint: CGFloat = 850
+        /// Reference lower edge of the compact window range.
+        static let compactBreakpoint: CGFloat = 760
 
         // MARK: Sidebar — fixed-ish, never grows to fill window
-        static let sidebarMin: CGFloat = 180
-        static let sidebarIdeal: CGFloat = 220
+        static let sidebarMinWidth: CGFloat = 180
+        static let sidebarDefaultWidth: CGFloat = 230
+        static let sidebarMin: CGFloat = sidebarMinWidth
+        static let sidebarIdeal: CGFloat = sidebarDefaultWidth
         static let sidebarMax: CGFloat = 320
 
         // MARK: Inspector — fixed-ish, pinned right, never grows to fill window
         static let inspectorMin: CGFloat = 260
-        static let inspectorIdeal: CGFloat = 320
-        static let inspectorMax: CGFloat = 420
+        static let inspectorDefaultWidth: CGFloat = 330
+        static let inspectorIdeal: CGFloat = inspectorDefaultWidth
+        static let inspectorMax: CGFloat = 440
 
         // MARK: Grid column (center) — the only flexible pane
+        static let gridMinWidth: CGFloat = 520
         static let gridContentMin: CGFloat = 620
         static let gridContentIdeal: CGFloat = 800
-        static let gridUsableMinRegular: CGFloat = 520
-        static let gridUsableMinMedium: CGFloat = 500
+        static let gridUsableMinRegular: CGFloat = gridMinWidth
+        static let gridUsableMinMedium: CGFloat = gridMinWidth
         static let gridUsableMinCompact: CGFloat = 420
 
         // MARK: Split dividers

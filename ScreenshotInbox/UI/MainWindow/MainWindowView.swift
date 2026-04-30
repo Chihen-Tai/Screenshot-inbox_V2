@@ -19,7 +19,28 @@ struct MainWindowView: View {
                     mode: appState.layoutMode,
                     sidebarVisible: $appState.sidebarOverrideVisible,
                     inspectorVisible: $appState.inspectorOverrideVisible,
-                    onImport: presentImportPanel
+                    selectedCount: appState.selectedScreenshots.count,
+                    isMaintenanceRunning: appState.isMaintenanceRunning,
+                    onImport: presentImportPanel,
+                    onRefreshOCR: {
+                        appState.refreshOCRState()
+                        appState.showToast("OCR refreshed", kind: .success)
+                    },
+                    onRerunOCR: {
+                        appState.router.rerunOCR(appState.selectedScreenshots)
+                    },
+                    onRerunCodeDetection: {
+                        appState.router.rerunCodeDetection(appState.selectedScreenshots)
+                    },
+                    onExportPDF: {
+                        appState.router.mergeIntoPDF(appState.selectedScreenshots)
+                    },
+                    onRevealLibraryFolder: appState.revealLibraryFolder,
+                    onRunRulesNow: appState.runRulesNowForSelection,
+                    onRebuildThumbnails: appState.rebuildAllThumbnails,
+                    onOpenSettings: {
+                        SettingsWindowOpener.open(appState: appState)
+                    }
                 )
             }
             .frame(
@@ -62,8 +83,13 @@ struct MainWindowView: View {
                     screenshot: shot,
                     thumbnailProvider: appState.thumbnailProvider
                 ) {
-                    appState.previewedScreenshotID = nil
+                    appState.closePreview()
                 }
+                .environmentObject(appState)
+            }
+            .sheet(item: ocrTextViewerBinding) { shot in
+                OCRTextViewerSheet(screenshot: shot)
+                    .environmentObject(appState)
             }
             // Phase 5 — Rename sheet.
             .sheet(item: renameBinding) { shot in
@@ -77,6 +103,32 @@ struct MainWindowView: View {
             .sheet(isPresented: $appState.isCollectionPickerPresented) {
                 CollectionPickerSheet()
                     .environmentObject(appState)
+            }
+            .sheet(isPresented: $appState.isCollectionRenamePresented) {
+                CollectionRenameSheet()
+                    .environmentObject(appState)
+            }
+            .alert("Delete collection '\(appState.collectionDeleteTarget?.name ?? "")'?",
+                   isPresented: deleteCollectionBinding) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelDeleteCollection()
+                }
+                Button("Delete Collection", role: .destructive) {
+                    appState.confirmDeleteCollection()
+                }
+            } message: {
+                Text("Screenshots will not be deleted. They will only be removed from this collection.")
+            }
+            .alert(appState.permanentDeleteAlertTitle,
+                   isPresented: permanentDeleteBinding) {
+                Button("Cancel", role: .cancel) {
+                    appState.cancelPermanentDelete()
+                }
+                Button(appState.permanentDeleteConfirmButtonTitle, role: .destructive) {
+                    appState.confirmPermanentDelete()
+                }
+            } message: {
+                Text(appState.permanentDeleteAlertMessage)
             }
             .sheet(isPresented: $appState.isPDFExportSheetPresented) {
                 PDFExportSheet()
@@ -116,9 +168,40 @@ struct MainWindowView: View {
         )
     }
 
+    private var ocrTextViewerBinding: Binding<Screenshot?> {
+        Binding(
+            get: { appState.ocrTextViewerScreenshot },
+            set: { newValue in
+                if newValue == nil { appState.ocrTextViewerScreenshotID = nil }
+            }
+        )
+    }
+
     private var itemCountText: String {
         let n = appState.filteredScreenshots.count
         return n == 1 ? "1 item" : "\(n) items"
+    }
+
+    private var deleteCollectionBinding: Binding<Bool> {
+        Binding(
+            get: { appState.collectionDeleteTarget != nil },
+            set: { isPresented in
+                if !isPresented {
+                    appState.cancelDeleteCollection()
+                }
+            }
+        )
+    }
+
+    private var permanentDeleteBinding: Binding<Bool> {
+        Binding(
+            get: { !appState.permanentDeleteTargetIDs.isEmpty },
+            set: { isPresented in
+                if !isPresented {
+                    appState.cancelPermanentDelete()
+                }
+            }
+        )
     }
 
     /// Opens an `NSOpenPanel` filtered to the formats the importer can read,

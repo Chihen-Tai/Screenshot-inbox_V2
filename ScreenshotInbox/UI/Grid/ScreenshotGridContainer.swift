@@ -18,9 +18,16 @@ struct ScreenshotGridContainer: View {
     @State private var menuController: ContextMenuController?
 
     var body: some View {
+        let selectedCount = appState.selectedScreenshotIDs.count
+        let isBatchBarVisible = selectedCount > 1
+        let _ = Self.logBatchBarEvaluation(count: selectedCount, visible: isBatchBarVisible)
         VStack(spacing: 0) {
             FilterBarView()
             Divider().opacity(0.4)
+            if appState.sidebarSelection == .smart(.duplicates) {
+                DuplicateCleanupBanner()
+                Divider().opacity(0.4)
+            }
 
             ScreenshotCollectionViewRepresentable(
                 screenshots: appState.filteredScreenshots,
@@ -28,6 +35,9 @@ struct ScreenshotGridContainer: View {
                 layoutMode: appState.layoutMode,
                 thumbnailProvider: appState.thumbnailProvider,
                 onClick: handleClick,
+                onSelectionSnapshot: { ids, source in
+                    appState.setSelectedScreenshotIDs(ids, source: source)
+                },
                 onDoubleClick: handleDoubleClick,
                 onBackgroundClick: {
                     print("[GridContainer] background click — clear")
@@ -68,7 +78,11 @@ struct ScreenshotGridContainer: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 if appState.filteredScreenshots.isEmpty && !appState.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    ContentUnavailableView("No matching screenshots", systemImage: "magnifyingglass")
+                    ContentUnavailableView(
+                        "No matching screenshots",
+                        systemImage: "magnifyingglass",
+                        description: Text("Try searching OCR text, tags, QR links, or filenames.")
+                    )
                         .foregroundStyle(Theme.SemanticColor.secondaryLabel)
                 }
             }
@@ -82,13 +96,13 @@ struct ScreenshotGridContainer: View {
             footer
         }
         .overlay(alignment: .bottom) {
-            if appState.selection.count >= 2 {
+            if isBatchBarVisible {
                 BatchActionBarView()
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .background(keyboardShortcutSink)
-        .animation(.easeOut(duration: 0.18), value: appState.selection.count)
+        .animation(.easeOut(duration: 0.18), value: selectedCount)
         .navigationSplitViewColumnWidth(
             min: Theme.Layout.gridContentMin,
             ideal: Theme.Layout.gridContentIdeal
@@ -96,6 +110,17 @@ struct ScreenshotGridContainer: View {
         .onChange(of: appState.activeFilterChip) { appState.pruneSelectionToVisible() }
         .onChange(of: appState.searchQuery) { appState.pruneSelectionToVisible() }
         .onChange(of: appState.sidebarSelection) { appState.pruneSelectionToVisible() }
+        .onChange(of: selectedCount) { _, newValue in
+            print("[BatchBarDebug] selectedIDs count = \(newValue)")
+            print("[BatchBarDebug] visible = \(newValue > 1)")
+            print("[BatchBarDebug] source = appState.selectedScreenshotIDs")
+        }
+    }
+
+    private static func logBatchBarEvaluation(count: Int, visible: Bool) {
+        print("[BatchBarDebug] selectedIDs count = \(count)")
+        print("[BatchBarDebug] visible = \(visible)")
+        print("[BatchBarDebug] source = appState.selectedScreenshotIDs")
     }
 
     private func ensureMenuController() -> ContextMenuController {
@@ -133,18 +158,18 @@ struct ScreenshotGridContainer: View {
     private func handleClick(_ id: UUID, _ mods: NSEvent.ModifierFlags) {
         let visibleIDs = appState.filteredScreenshots.map(\.id)
         if mods.contains(.shift) {
-            appState.selection.extendRange(to: id, in: visibleIDs)
+            appState.extendSelection(to: id, in: visibleIDs, source: "shiftClick")
         } else if mods.contains(.command) {
-            appState.selection.toggle(id)
+            appState.toggleSelection(id, source: "cmdClick")
         } else {
-            appState.selection.replace(with: id)
+            appState.replaceSelection(with: id, source: "mouse")
         }
     }
 
     private func handleDoubleClick(_ id: UUID) {
-        appState.selection.replace(with: id)
+        appState.replaceSelection(with: id, source: "mouse")
         guard let shot = appState.screenshots(for: [id]).first else { return }
-        appState.router.open([shot])
+        appState.router.quickLook([shot])
     }
 
     private var footer: some View {
@@ -164,5 +189,62 @@ struct ScreenshotGridContainer: View {
         let totalText = total == 1 ? "1 item" : "\(total) items"
         if sel <= 1 { return totalText }
         return "\(totalText) — \(sel) selected"
+    }
+}
+
+private struct DuplicateCleanupBanner: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "square.on.square")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Theme.SemanticColor.label)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            Button {
+                appState.keepSelectedDuplicateAndTrashGroupExtras()
+            } label: {
+                Label("Keep Selected", systemImage: "checkmark.circle")
+            }
+            .disabled(appState.primarySelection.flatMap { appState.duplicateGroup(containing: $0.id) } == nil)
+            .help("Keep the selected screenshot and move the other screenshots in its duplicate group to Trash")
+
+            Button {
+                appState.trashDuplicateExtrasKeepingRecommended()
+            } label: {
+                Label("Move Extras to Trash", systemImage: "trash")
+            }
+            .disabled(appState.duplicateGroups.isEmpty)
+            .help("Keep the recommended item in each duplicate group and move the extras to App Trash")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Theme.SemanticColor.quietFill.opacity(0.22))
+    }
+
+    private var title: String {
+        let groupCount = appState.duplicateGroups.count
+        let itemCount = appState.duplicatesCount
+        guard groupCount > 0 else { return "No duplicates found" }
+        return "\(groupCount) duplicate group\(groupCount == 1 ? "" : "s") • \(itemCount) screenshot\(itemCount == 1 ? "" : "s")"
+    }
+
+    private var subtitle: String {
+        guard !appState.duplicateGroups.isEmpty else {
+            return "Use Advanced settings to rebuild the duplicate index after imports."
+        }
+        return "Favorites are kept first, then higher resolution, then oldest import."
     }
 }

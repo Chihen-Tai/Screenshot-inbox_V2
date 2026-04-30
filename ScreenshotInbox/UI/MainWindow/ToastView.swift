@@ -5,6 +5,7 @@ import SwiftUI
 /// shadow, single line of copy with an icon. Auto-dismiss is owned by
 /// `AppState.showToast`; this view is a pure renderer.
 struct ToastView: View {
+    @EnvironmentObject private var appState: AppState
     let message: ToastMessage
 
     var body: some View {
@@ -17,6 +18,14 @@ struct ToastView: View {
                 .foregroundStyle(Theme.SemanticColor.label)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+            if let undoTitle = message.undoTitle {
+                Button(undoTitle) {
+                    appState.performAppUndo()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.Palette.accent)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

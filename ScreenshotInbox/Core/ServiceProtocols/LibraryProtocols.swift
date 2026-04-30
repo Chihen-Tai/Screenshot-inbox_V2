@@ -28,12 +28,60 @@ protocol ThumbnailGenerating {
     func writeThumbnails(from sourceURL: URL, uuid: UUID) throws
 }
 
+/// Generates compact perceptual hashes for image similarity. Implementations
+/// can be platform-specific because decoding lives at the platform boundary.
+protocol ImageHashingService {
+    var algorithm: String { get }
+    func hashImage(at url: URL) throws -> ImageHashRecord
+}
+
+enum ImportConflictReason: String, Hashable {
+    case exactDuplicateHash
+}
+
+struct ImportConflict: Identifiable, Hashable {
+    var id: String { "\(incomingFileHash):\(incomingPath):\(existingScreenshotUUID)" }
+    let incomingPath: String
+    let incomingFilename: String
+    let incomingFileHash: String
+    let existingScreenshotUUID: String
+    let existingFilename: String
+    let existingLibraryPath: String?
+    let existingOriginalPath: String?
+    let existingCreatedAt: Date?
+    let reason: ImportConflictReason
+}
+
+enum ImportConflictResolution: String, Hashable {
+    case keepBoth
+    case replaceExisting
+    case skip
+}
+
+struct ImportConflictDecision: Hashable {
+    let conflict: ImportConflict
+    let resolution: ImportConflictResolution
+}
+
+protocol ImportConflictResolving {
+    func resolve(conflicts: [ImportConflict]) async -> [ImportConflictDecision]
+}
+
+struct SkipImportConflictResolver: ImportConflictResolving {
+    func resolve(conflicts: [ImportConflict]) async -> [ImportConflictDecision] {
+        conflicts.map { ImportConflictDecision(conflict: $0, resolution: .skip) }
+    }
+}
+
 /// Result of a batch import. `failures` carries per-URL errors so the caller
-/// can surface them in a toast; `duplicates` is a count rather than a list
-/// because we don't reuse the existing record beyond skipping the copy.
+/// can surface them in a toast. `duplicates` remains the skipped-duplicate
+/// count for existing UI compatibility.
 struct ImportResult {
     var imported: [Screenshot] = []
     var duplicates: Int = 0
+    var conflicts: [ImportConflict] = []
+    var keptDuplicateCopies: Int = 0
+    var replaced: [Screenshot] = []
     var failures: [(URL, Error)] = []
 }
 

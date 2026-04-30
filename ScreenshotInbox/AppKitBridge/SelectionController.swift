@@ -29,7 +29,7 @@ final class SelectionController: ObservableObject {
     /// Programmatic clear (Escape, sidebar/filter reset).
     func clear() {
         print("[Selection] clear")
-        selectedIDs.removeAll()
+        selectedIDs = []
         anchorID = nil
         print("[Selection] selected IDs now:", selectedIDs)
     }
@@ -38,11 +38,13 @@ final class SelectionController: ObservableObject {
     /// subsequent Shift-clicks pivot from the most recent intent — this
     /// matches Finder behavior.
     func toggle(_ id: UUID) {
+        var updated = selectedIDs
         if selectedIDs.contains(id) {
-            selectedIDs.remove(id)
+            updated.remove(id)
         } else {
-            selectedIDs.insert(id)
+            updated.insert(id)
         }
+        selectedIDs = updated
         anchorID = id
     }
 
@@ -71,6 +73,19 @@ final class SelectionController: ObservableObject {
         selectedIDs = Set(orderedIDs)
         if anchorID == nil { anchorID = orderedIDs.first }
         print("[Selection] selected IDs now:", selectedIDs)
+    }
+
+    /// Full selection snapshot from AppKit-native selection paths.
+    /// Replaces the canonical set instead of applying incremental deltas so
+    /// SwiftUI always sees the same truth as NSCollectionView.
+    func setSelectedIDs(_ ids: Set<UUID>, source: String) {
+        print("[SelectionDebug] SelectionController setSelectedIDs source=\(source) count = \(ids.count)")
+        selectedIDs = ids
+        if let anchor = anchorID, !ids.contains(anchor) {
+            anchorID = ids.first
+        } else if anchorID == nil {
+            anchorID = ids.first
+        }
     }
 
     /// Drop selection entries that are no longer visible (e.g. after a

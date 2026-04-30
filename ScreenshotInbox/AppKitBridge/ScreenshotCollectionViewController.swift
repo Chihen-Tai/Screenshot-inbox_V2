@@ -21,6 +21,9 @@ final class ScreenshotCollectionViewController: NSViewController {
     /// Click callback. The container resolves modifier flags to the right
     /// SelectionController call (replace / toggle / extendRange).
     var onItemClick: ((UUID, NSEvent.ModifierFlags) -> Void)?
+    /// Full AppKit selection snapshot, used for native selection paths such
+    /// as rubber-band selection and collection-view delegate changes.
+    var onSelectionSnapshot: ((Set<UUID>, String) -> Void)?
     var onItemDoubleClick: ((UUID) -> Void)?
     /// Background click (empty grid area) clears selection.
     var onBackgroundClick: (() -> Void)?
@@ -182,6 +185,21 @@ final class ScreenshotCollectionViewController: NSViewController {
             paths.insert(IndexPath(item: i, section: 0))
         }
         cv.selectItems(at: paths, scrollPosition: [])
+    }
+
+    private func syncSelectionFromCollectionView(reason: String) {
+        guard let cv = collectionView else { return }
+        print("[SelectionDebug] NSCollectionView selectedIndexPaths count = \(cv.selectionIndexPaths.count)")
+        let ids = Set(cv.selectionIndexPaths.compactMap { indexPath -> UUID? in
+            guard indexPath.item < screenshots.count else { return nil }
+            return screenshots[indexPath.item].id
+        })
+        print("[SelectionDebug] Mouse/AppKit selected IDs count = \(ids.count)")
+        print("[SelectionDebug] syncing to SelectionController count = \(ids.count)")
+        currentSelectedIDs = ids
+        DispatchQueue.main.async { [weak self] in
+            self?.onSelectionSnapshot?(ids, reason)
+        }
     }
 
     fileprivate func dispatchClick(at indexPath: IndexPath, modifiers: NSEvent.ModifierFlags) {
@@ -408,16 +426,18 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
 // MARK: - Delegate
 
 extension ScreenshotCollectionViewController: NSCollectionViewDelegate {
-    // Item-level mouseDown drives selection now. The default delegate paths
-    // would lose modifier flags, so we keep them as no-ops.
     func collectionView(_ collectionView: NSCollectionView,
                         didSelectItemsAt indexPaths: Set<IndexPath>) {
-        _ = isApplyingExternalSelection
+        print("[SelectionDebug] NSCollectionView selectedIndexPaths count = \(collectionView.selectionIndexPaths.count)")
+        guard !isApplyingExternalSelection else { return }
+        syncSelectionFromCollectionView(reason: "collectionViewDidSelect")
     }
 
     func collectionView(_ collectionView: NSCollectionView,
                         didDeselectItemsAt indexPaths: Set<IndexPath>) {
-        // No-op for the same reason as above.
+        print("[SelectionDebug] NSCollectionView selectedIndexPaths count = \(collectionView.selectionIndexPaths.count)")
+        guard !isApplyingExternalSelection else { return }
+        syncSelectionFromCollectionView(reason: "collectionViewDidDeselect")
     }
 }
 

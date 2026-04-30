@@ -1,5 +1,21 @@
 import SwiftUI
 
+enum ToolbarViewOptionsMenuItem: CaseIterable, Hashable {
+    case toggleSidebar
+    case toggleInspector
+}
+
+enum ToolbarMoreMenuItem: CaseIterable, Hashable {
+    case refreshOCR
+    case rerunOCR
+    case rerunCodeDetection
+    case exportPDF
+    case revealLibraryFolder
+    case runRulesNow
+    case rebuildThumbnails
+    case openSettings
+}
+
 /// Native macOS toolbar content for the main window.
 /// The window title is set via `.navigationTitle(...)` on the parent view —
 /// this toolbar intentionally does NOT render its own title, to avoid the
@@ -9,18 +25,28 @@ struct MainToolbarView: ToolbarContent {
     let mode: Theme.LayoutMode
     @Binding var sidebarVisible: Bool
     @Binding var inspectorVisible: Bool
+    let selectedCount: Int
+    let isMaintenanceRunning: Bool
     var onImport: () -> Void = {}
+    var onRefreshOCR: () -> Void = {}
+    var onRerunOCR: () -> Void = {}
+    var onRerunCodeDetection: () -> Void = {}
+    var onExportPDF: () -> Void = {}
+    var onRevealLibraryFolder: () -> Void = {}
+    var onRunRulesNow: () -> Void = {}
+    var onRebuildThumbnails: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
-            if mode == .compact {
-                Button {
-                    sidebarVisible.toggle()
-                } label: {
-                    Label("Sidebar", systemImage: "sidebar.left")
-                }
-                .help("Show sidebar")
+            Button {
+                sidebarVisible.toggle()
+            } label: {
+                Label("Sidebar", systemImage: "sidebar.left")
             }
+            .help(mode == .compact
+                  ? "Sidebar is hidden in compact windows"
+                  : (sidebarVisible ? "Hide sidebar" : "Show sidebar"))
         }
 
         ToolbarItem(placement: .principal) {
@@ -28,7 +54,7 @@ struct MainToolbarView: ToolbarContent {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.SemanticColor.secondaryLabel)
-                TextField("Search screenshots, OCR, or tags", text: $searchQuery)
+                TextField("Search filename, OCR, tags, QR links...", text: $searchQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .lineLimit(1)
@@ -54,7 +80,11 @@ struct MainToolbarView: ToolbarContent {
             }
             .help("Import screenshots")
 
-            Button {} label: {
+            Menu {
+                ForEach(ToolbarViewOptionsMenuItem.allCases, id: \.self) { item in
+                    viewOptionsMenuItem(item)
+                }
+            } label: {
                 Label("View Options", systemImage: "slider.horizontal.3")
             }
             .help("View options")
@@ -66,10 +96,67 @@ struct MainToolbarView: ToolbarContent {
             }
             .help(inspectorVisible ? "Hide inspector" : "Show inspector")
 
-            Button {} label: {
+            Menu {
+                ForEach(ToolbarMoreMenuItem.allCases, id: \.self) { item in
+                    moreMenuItem(item)
+                }
+            } label: {
                 Label("More", systemImage: "ellipsis.circle")
             }
             .help("More")
+        }
+    }
+
+    @ViewBuilder
+    private func viewOptionsMenuItem(_ item: ToolbarViewOptionsMenuItem) -> some View {
+        switch item {
+        case .toggleSidebar:
+            Toggle("Left Sidebar", isOn: $sidebarVisible)
+        case .toggleInspector:
+            Toggle("Right Inspector", isOn: $inspectorVisible)
+        }
+    }
+
+    @ViewBuilder
+    private func moreMenuItem(_ item: ToolbarMoreMenuItem) -> some View {
+        switch item {
+        case .refreshOCR:
+            Button("Refresh OCR", systemImage: "arrow.clockwise") {
+                onRefreshOCR()
+            }
+        case .rerunOCR:
+            Button("Refresh OCR for Selection", systemImage: "text.viewfinder") {
+                onRerunOCR()
+            }
+            .disabled(selectedCount == 0)
+        case .rerunCodeDetection:
+            Button("Re-run QR Detection", systemImage: "qrcode.viewfinder") {
+                onRerunCodeDetection()
+            }
+            .disabled(selectedCount == 0)
+        case .exportPDF:
+            Button("Export as PDF", systemImage: "doc.richtext") {
+                onExportPDF()
+            }
+            .disabled(selectedCount == 0)
+        case .revealLibraryFolder:
+            Button("Reveal Library Folder", systemImage: "folder") {
+                onRevealLibraryFolder()
+            }
+        case .runRulesNow:
+            Button("Run Rules Now", systemImage: "wand.and.stars") {
+                onRunRulesNow()
+            }
+            .disabled(selectedCount == 0)
+        case .rebuildThumbnails:
+            Button("Rebuild Thumbnails", systemImage: "photo.stack") {
+                onRebuildThumbnails()
+            }
+            .disabled(isMaintenanceRunning)
+        case .openSettings:
+            Button("Open Settings", systemImage: "gearshape") {
+                onOpenSettings()
+            }
         }
     }
 }

@@ -33,57 +33,78 @@ final class ContextMenuController {
         let n = targets.count
         let isTrashView = appState.sidebarSelection == .trash
 
+        if isTrashView {
+            add(menu, title: n > 1 ? "Restore Selected" : "Restore",
+                key: .restoreFromTrash)
+            add(menu, title: n > 1 ? "Delete Permanently Selected" : "Delete Permanently",
+                key: .deletePermanently)
+            menu.addItem(.separator())
+            add(menu, title: "Reveal in Finder",              key: .revealInFinder)
+            add(menu, title: "Open",                          key: .open)
+            return menu
+        }
+
         add(menu, title: "Open",                              key: .open)
         add(menu, title: "Quick Look",                        key: .quickLook,
             keyEquivalent: " ", modifiers: [])
         add(menu, title: "Reveal in Finder",                  key: .revealInFinder)
-        if n == 1 && !isTrashView {
+        if n == 1 {
             add(menu, title: "Rename",                        key: .rename,
                 keyEquivalent: "\r", modifiers: [])
         }
         menu.addItem(.separator())
 
-        if isTrashView {
-            add(menu, title: n > 1 ? "Restore \(n) Screenshots" : "Restore",
-                key: .restoreFromTrash)
-            add(menu, title: "Delete Permanently", key: .deletePermanently, enabled: false)
-        } else {
-            add(menu,
-                title: favoriteTitle(for: targets),
-                key: .toggleFavorite)
-            add(menu, title: n > 1 ? "Add Tag to \(n) Screenshots" : "Add Tag",
-                key: .addTag)
-            add(menu, title: n > 1 ? "Add \(n) Screenshots to Collection" : "Add to Collection",
-                key: .moveToCollection)
-            menu.addItem(.separator())
+        add(menu,
+            title: favoriteTitle(for: targets),
+            key: .toggleFavorite)
+        add(menu, title: n > 1 ? "Add Tag to \(n) Screenshots" : "Add Tag",
+            key: .addTag)
+        add(menu, title: n > 1 ? "Add \(n) Screenshots to Collection" : "Add to Collection",
+            key: .moveToCollection)
+        menu.addItem(.separator())
 
-            add(menu, title: n > 1 ? "Copy \(n) Images" : "Copy Image",
-                key: .copyImage)
-            add(menu, title: n > 1 ? "Copy OCR Text from \(n) Screenshots" : "Copy OCR Text",
-                key: .copyOCRText)
-            add(menu, title: n > 1 ? "Re-run OCR for \(n) Screenshots" : "Re-run OCR",
-                key: .rerunOCR)
-            if n == 1 {
-                let codes = targets.first.map { appState.detectedCodes(for: $0) } ?? []
-                if codes.contains(where: \.isURL) {
-                    add(menu, title: "Open Detected Link", key: .openDetectedLink)
-                }
-                if !codes.isEmpty {
-                    add(menu, title: codes.first?.isURL == true ? "Copy Detected Link" : "Copy Detected Text",
-                        key: .copyDetectedLink)
-                }
-            }
-            add(menu, title: n > 1 ? "Re-detect Codes for \(n) Screenshots" : "Re-detect Codes",
-                key: .rerunCodeDetection)
-            add(menu, title: n > 1 ? "Merge \(n) Screenshots into PDF" : "Export as PDF",
-                key: .mergeIntoPDF)
-            menu.addItem(.separator())
-
-            add(menu,
-                title: n > 1 ? "Move \(n) Screenshots to Trash" : "Move to Trash",
-                key: .moveToTrash,
-                keyEquivalent: "\u{8}", modifiers: [])
+        add(menu, title: n > 1 ? "Copy \(n) Images" : "Copy Image",
+            key: .copyImage)
+        add(menu, title: n > 1 ? "Copy \(n) Files" : "Copy File",
+            key: .copyFile)
+        add(menu, title: "Copy File Path",
+            key: .copyFilePath)
+        add(menu, title: "Copy Markdown Reference",
+            key: .copyMarkdownReference)
+        add(menu, title: n > 1 ? "Copy OCR Text from \(n) Screenshots" : "Copy OCR Text",
+            key: .copyOCRText)
+        if n == 1 {
+            let hasOCRText = targets.first?.isOCRComplete == true && targets.first?.ocrSnippets.isEmpty == false
+            add(menu, title: "View OCR Text", key: .viewOCRText, enabled: hasOCRText)
         }
+        add(menu, title: n > 1 ? "Re-run OCR for \(n) Screenshots" : "Re-run OCR",
+            key: .rerunOCR)
+        if n == 1 {
+            let codes = targets.first.map { appState.detectedCodes(for: $0) } ?? []
+            if codes.contains(where: \.isURL) {
+                add(menu, title: "Open Detected Link", key: .openDetectedLink)
+            }
+            if !codes.isEmpty {
+                add(menu, title: codes.first?.isURL == true ? "Copy Detected Link" : "Copy Detected Text",
+                    key: .copyDetectedLink)
+            }
+        }
+        add(menu, title: n > 1 ? "Re-detect Codes for \(n) Screenshots" : "Re-detect Codes",
+            key: .rerunCodeDetection)
+        add(menu, title: n > 1 ? "Merge \(n) Screenshots into PDF" : "Export as PDF",
+            key: .mergeIntoPDF)
+        add(menu, title: "Export Originals…",
+            key: .exportOriginals)
+        add(menu, title: "Export OCR as Markdown…",
+            key: .exportOCRMarkdown)
+        add(menu, title: "Share…",
+            key: .share)
+        menu.addItem(.separator())
+
+        add(menu,
+            title: n > 1 ? "Move \(n) Screenshots to Trash" : "Move to Trash",
+            key: .moveToTrash,
+            keyEquivalent: "\u{8}", modifiers: [])
 
         return menu
     }
@@ -149,12 +170,19 @@ private enum MenuActionKey: String {
     case addTag
     case moveToCollection
     case copyImage
+    case copyFile
+    case copyFilePath
+    case copyMarkdownReference
     case copyOCRText
+    case viewOCRText
     case rerunOCR
     case openDetectedLink
     case copyDetectedLink
     case rerunCodeDetection
     case mergeIntoPDF
+    case exportOriginals
+    case exportOCRMarkdown
+    case share
     case moveToTrash
     case toggleFavorite
     case restoreFromTrash
@@ -198,16 +226,23 @@ private final class MenuActionInvoker: NSObject {
         case .addTag:            router.addTag(targets)
         case .moveToCollection:  router.moveToCollection(targets)
         case .copyImage:         router.copyImage(targets)
+        case .copyFile:          router.copyFiles(targets)
+        case .copyFilePath:      router.copyFilePaths(targets)
+        case .copyMarkdownReference: router.copyMarkdownReference(targets)
         case .copyOCRText:       router.copyOCRText(targets)
+        case .viewOCRText:       router.viewOCRText(targets)
         case .rerunOCR:          router.rerunOCR(targets)
         case .openDetectedLink:  router.openDetectedLink(targets)
         case .copyDetectedLink:  router.copyDetectedLink(targets)
         case .rerunCodeDetection: router.rerunCodeDetection(targets)
         case .mergeIntoPDF:      router.mergeIntoPDF(targets)
+        case .exportOriginals:   router.exportOriginals(targets)
+        case .exportOCRMarkdown: router.exportOCRMarkdown(targets)
+        case .share:             router.share(targets)
         case .moveToTrash:       router.moveToTrash(targets)
         case .toggleFavorite:    router.toggleFavorite(targets)
         case .restoreFromTrash:  router.restoreFromTrash(targets)
-        case .deletePermanently: router.deletePermanentlyPlaceholder(targets)
+        case .deletePermanently: router.deletePermanently(targets)
         case .importScreenshots: router.importScreenshots()
         case .newCollection:     router.newCollection()
         case .selectAll:         router.selectAll()

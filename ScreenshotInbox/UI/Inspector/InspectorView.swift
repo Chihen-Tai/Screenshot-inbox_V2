@@ -1,8 +1,34 @@
 import SwiftUI
 
+enum InspectorSection: Hashable {
+    case preview
+    case actions
+    case metadata
+    case ocr
+    case detectedCodes
+    case tags
+    case selectionSummary
+    case commonTags
+
+    static let singleSelectionOrder: [InspectorSection] = [
+        .preview,
+        .actions,
+        .metadata,
+        .ocr,
+        .detectedCodes,
+        .tags
+    ]
+
+    static let multiSelectionOrder: [InspectorSection] = [
+        .selectionSummary,
+        .actions,
+        .commonTags
+    ]
+}
+
 /// Three-state inspector:
-/// - none → calm "no selection" message.
-/// - one  → preview, metadata, OCR, tags, actions.
+/// - none -> calm "no selection" message.
+/// - one  -> preview, actions, metadata, OCR, detected codes, tags.
 /// - many → multi-selection summary + batch actions stub.
 struct InspectorView: View {
     @EnvironmentObject private var appState: AppState
@@ -67,22 +93,39 @@ struct InspectorView: View {
     private func singleState(_ shot: Screenshot) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Layout.inspectorSectionSpacing) {
-                PreviewBlock(screenshot: shot, thumbnailProvider: appState.thumbnailProvider)
-                MetadataSectionView(
-                    screenshot: shot,
-                    originalPath: appState.thumbnailProvider.originalURL(for: shot)?.path
-                )
-                InspectorSeparator()
-                OCRSectionView(screenshot: shot)
-                InspectorSeparator()
-                DetectedCodesSectionView(screenshot: shot)
-                InspectorSeparator()
-                TagsSectionView(screenshot: shot)
-                InspectorSeparator()
-                ActionsSectionView(screenshot: shot)
+                let sections = InspectorSection.singleSelectionOrder
+                ForEach(Array(sections.enumerated()), id: \.element) { index, section in
+                    singleSelectionSection(section, screenshot: shot)
+                    if index < sections.count - 1 {
+                        InspectorSeparator()
+                    }
+                }
             }
             .padding(Theme.Layout.inspectorPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func singleSelectionSection(_ section: InspectorSection, screenshot shot: Screenshot) -> some View {
+        switch section {
+        case .preview:
+            PreviewBlock(screenshot: shot, thumbnailProvider: appState.thumbnailProvider)
+        case .actions:
+            ActionsSectionView(screenshot: shot)
+        case .metadata:
+            MetadataSectionView(
+                screenshot: shot,
+                originalPath: appState.thumbnailProvider.originalURL(for: shot)?.path
+            )
+        case .ocr:
+            OCRSectionView(screenshot: shot)
+        case .detectedCodes:
+            DetectedCodesSectionView(screenshot: shot)
+        case .tags:
+            TagsSectionView(screenshot: shot)
+        case .selectionSummary, .commonTags:
+            EmptyView()
         }
     }
 
@@ -91,14 +134,30 @@ struct InspectorView: View {
     private func multiState(_ shots: [Screenshot]) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Layout.inspectorSectionSpacing) {
-                MultiSelectionHeader(shots: shots)
-                InspectorSeparator()
-                CommonTagsSection(shots: shots)
-                InspectorSeparator()
-                MultiActionsSection()
+                let sections = InspectorSection.multiSelectionOrder
+                ForEach(Array(sections.enumerated()), id: \.element) { index, section in
+                    multiSelectionSection(section, screenshots: shots)
+                    if index < sections.count - 1 {
+                        InspectorSeparator()
+                    }
+                }
             }
             .padding(Theme.Layout.inspectorPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func multiSelectionSection(_ section: InspectorSection, screenshots shots: [Screenshot]) -> some View {
+        switch section {
+        case .selectionSummary:
+            MultiSelectionHeader(shots: shots)
+        case .actions:
+            MultiActionsSection()
+        case .commonTags:
+            CommonTagsSection(shots: shots)
+        case .preview, .metadata, .ocr, .detectedCodes, .tags:
+            EmptyView()
         }
     }
 }
@@ -208,6 +267,10 @@ private struct MultiActionsSection: View {
             VStack(spacing: 0) {
                 row(title: "Merge PDF", systemImage: "doc.on.doc") {
                     appState.router.mergeIntoPDF(appState.selectedScreenshots)
+                }
+                rowDivider
+                row(title: "Export Originals", systemImage: "square.and.arrow.up") {
+                    appState.router.exportOriginals(appState.selectedScreenshots)
                 }
                 rowDivider
                 row(title: "Copy OCR Text", systemImage: "text.viewfinder") {

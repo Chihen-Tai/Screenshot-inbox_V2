@@ -1,0 +1,56 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode local state
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# Local databases and generated library data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+Screenshot Inbox Library/
+Thumbnails/
+Originals/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.orig
+*.pid
+
+# Generated exports and debug output
+*.pdf
+PDFExportDebug/
+Exports/
+
+# Local screenshots and sample data.
+# Public documentation screenshots should go under docs/images/.
+screenshots/
+sample-data/
+fixtures/local/
+
+# Local generated icon staging; committed app icons live under Resources.
+GeneratedAppIcon.iconset/
+
+# Local automation/runtime state
+.omx/
+.claude/
