@@ -24,6 +24,16 @@ enum ScreenshotClipboardError: LocalizedError {
     }
 }
 
+enum ScreenshotClipboardOperation: String {
+    case copy
+    case cut
+}
+
+struct ScreenshotClipboardSourceContext {
+    var sidebarSelection: SidebarSelection?
+    var collectionUUID: String?
+}
+
 final class ScreenshotClipboardService {
     typealias ScreenshotsProvider = ([String]) -> [Screenshot]
 
@@ -51,6 +61,39 @@ final class ScreenshotClipboardService {
 
     @discardableResult
     func copyScreenshots(ids: [String], to pasteboard: NSPasteboard) throws -> Int {
+        try writeScreenshots(
+            ids: ids,
+            operation: .copy,
+            source: nil,
+            to: pasteboard
+        )
+    }
+
+    @discardableResult
+    func cutScreenshots(ids: [String]) throws -> Int {
+        try cutScreenshots(ids: ids, source: nil, to: .general)
+    }
+
+    @discardableResult
+    func cutScreenshots(
+        ids: [String],
+        source: ScreenshotClipboardSourceContext?,
+        to pasteboard: NSPasteboard
+    ) throws -> Int {
+        try writeScreenshots(
+            ids: ids,
+            operation: .cut,
+            source: source,
+            to: pasteboard
+        )
+    }
+
+    private func writeScreenshots(
+        ids: [String],
+        operation: ScreenshotClipboardOperation,
+        source: ScreenshotClipboardSourceContext?,
+        to pasteboard: NSPasteboard
+    ) throws -> Int {
         let screenshots = screenshotsProvider(ids)
         guard !screenshots.isEmpty else { throw ScreenshotClipboardError.noScreenshots }
         let urls = screenshots.compactMap(managedFileURL)
@@ -62,6 +105,13 @@ final class ScreenshotClipboardService {
             screenshots.map(\.uuidString).joined(separator: "\n"),
             forType: DragPasteboardTypes.screenshotIDs
         )
+        pasteboard.setString(operation.rawValue, forType: DragPasteboardTypes.clipboardOperation)
+        if let sidebarSelection = source?.sidebarSelection {
+            pasteboard.setString(sidebarSelection.displayTitle, forType: DragPasteboardTypes.sourceSidebarDestination)
+        }
+        if let collectionUUID = source?.collectionUUID {
+            pasteboard.setString(collectionUUID, forType: DragPasteboardTypes.sourceCollectionID)
+        }
         if let firstImage = urls.compactMap(NSImage.init(contentsOf:)).first {
             if let pngData = firstImage.pngData {
                 pasteboard.setData(pngData, forType: .png)
@@ -73,10 +123,6 @@ final class ScreenshotClipboardService {
         return urls.count
     }
 
-    func cutScreenshots(ids: [String]) throws {
-        throw ScreenshotClipboardError.cutUnavailable
-    }
-
     func canPasteImageContent() -> Bool {
         canPasteImageContent(from: .general)
     }
@@ -86,6 +132,47 @@ final class ScreenshotClipboardService {
             pasteboard.data(forType: .png) != nil ||
             pasteboard.data(forType: .tiff) != nil ||
             NSImage(pasteboard: pasteboard) != nil
+    }
+
+    func internalScreenshotIDs() -> [UUID] {
+        internalScreenshotIDs(from: .general)
+    }
+
+    func internalScreenshotIDs(from pasteboard: NSPasteboard) -> [UUID] {
+        guard let raw = pasteboard.string(forType: DragPasteboardTypes.screenshotIDs),
+              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
+
+        if let data = raw.data(using: .utf8),
+           let jsonIDs = try? JSONDecoder().decode([String].self, from: data) {
+            return uniqueUUIDs(from: jsonIDs)
+        }
+
+        let separatedIDs = raw
+            .components(separatedBy: CharacterSet(charactersIn: "\n,"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return uniqueUUIDs(from: separatedIDs)
+    }
+
+    func clipboardOperation() -> ScreenshotClipboardOperation {
+        clipboardOperation(from: .general)
+    }
+
+    func clipboardOperation(from pasteboard: NSPasteboard) -> ScreenshotClipboardOperation {
+        guard let raw = pasteboard.string(forType: DragPasteboardTypes.clipboardOperation),
+              let operation = ScreenshotClipboardOperation(rawValue: raw) else {
+            return .copy
+        }
+        return operation
+    }
+
+    func sourceCollectionUUID() -> String? {
+        sourceCollectionUUID(from: .general)
+    }
+
+    func sourceCollectionUUID(from pasteboard: NSPasteboard) -> String? {
+        pasteboard.string(forType: DragPasteboardTypes.sourceCollectionID)
     }
 
     func pasteIntoInbox() async throws -> ImportResult {
@@ -111,6 +198,17 @@ final class ScreenshotClipboardService {
             ? URL(fileURLWithPath: libraryPath)
             : libraryRootURL.appendingPathComponent(libraryPath)
         return fileManager.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func uniqueUUIDs(from strings: [String]) -> [UUID] {
+        var seen: Set<UUID> = []
+        var ids: [UUID] = []
+        for string in strings {
+            guard let id = UUID(uuidString: string), !seen.contains(id) else { continue }
+            seen.insert(id)
+            ids.append(id)
+        }
+        return ids
     }
 
     private func imageFileURLs(from pasteboard: NSPasteboard) -> [URL] {

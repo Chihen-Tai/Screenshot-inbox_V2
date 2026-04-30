@@ -6,6 +6,17 @@ Screenshot Inbox is a native macOS app for collecting, organizing, searching, an
 
 Screenshot Inbox helps keep screenshots out of scattered folders by importing them into a local managed library. From there, you can organize screenshots with tags and collections, search by filename or extracted text, detect QR codes and links, export selected items, and safely clean up with app-level Trash and restore.
 
+## Installation(RECOMMAND)
+
+```bash
+git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
+cd Screenshot-inbox_V2
+swift build
+swift run ScreenshotInbox
+```
+
+The project is a Swift Package Manager executable target, not an Xcode project. If you prefer Xcode, open `Package.swift`.
+
 ## Screenshots
 
 
@@ -56,27 +67,6 @@ Screenshot Inbox helps keep screenshots out of scattered folders by importing th
 - Swift 5.10 or later, based on `Package.swift`.
 - Xcode 15.3 or later is recommended for Swift 5.10 and macOS SDK support.
 - OCR and QR detection use Apple frameworks and require macOS support for the relevant Vision APIs.
-
-## Installation
-
-There is not yet a packaged release build.
-
-For now:
-
-1. Clone the repository.
-2. Open `Package.swift` in Xcode, or build with Swift Package Manager.
-3. Build and run the `ScreenshotInbox` executable.
-
-## Build from Source
-
-```bash
-git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
-cd Screenshot-inbox_V2
-swift build
-swift run ScreenshotInbox
-```
-
-The project is a Swift Package Manager executable target, not an Xcode project. If you prefer Xcode, open `Package.swift`.
 
 ## Release Builds
 
@@ -130,7 +120,7 @@ See `ARCHITECTURE.md` for more detail.
 
 Screenshot Inbox is local-first. It does not upload your screenshots or OCR text to any server.
 
-Screenshots are stored in a local managed library on your Mac. OCR and QR detection run locally using Apple frameworks. No account is required, no telemetry or network services are included, and watched folders are limited to the folders configured in Settings. Import, rename, trash, and delete workflows operate on managed Screenshot Inbox copies by default, not the original source files on your Desktop, Downloads, or other folders.
+Screenshots are stored in a local managed library on your Mac. OCR and QR detection run locally using Apple frameworks. No account is required, no telemetry or network services are included, and watched folders are limited to the folders configured in Settings. Import, rename, trash, and delete workflows operate on managed Screenshot Inbox copies by default, not the original source files on your Desktop, Downloads, or other folders. Optional Source Folder Sync settings can rename or move original source files to macOS Trash only when explicitly enabled.
 
 See `PRIVACY.md` for details.
 

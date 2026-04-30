@@ -107,6 +107,7 @@ final class AppState: ObservableObject {
     // MARK: - Selection / shortcuts
 
     let selection: SelectionController
+    @Published private(set) var cutScreenshotIDs: Set<UUID> = []
     let shortcuts = WindowShortcutController()
 
     /// Phase 5 router. Set in `init` after self is fully constructed so it
@@ -146,6 +147,7 @@ final class AppState: ObservableObject {
     private(set) var folderAccessService: FolderAccessService
     private(set) var thumbnailProvider: MacThumbnailProvider
     private(set) var fileActionService: MacFileActionService
+    private(set) var sourceFolderSyncService: SourceFolderSyncService
     /// Legacy demo-mode flag. Runtime no longer seeds mock screenshots when
     /// SQLite is empty; this remains true only if persistence could not open.
     private(set) var isUsingMockData: Bool = true
@@ -191,8 +193,10 @@ final class AppState: ObservableObject {
 
     private var selectionForwarder: AnyCancellable?
     private var toastDismissTask: Task<Void, Never>?
+    private var sourceFolderSyncValidationTasks: [String: Task<Void, Never>] = [:]
     private var isPerformingUndo = false
     private var pendingToastUndoTitle: String?
+    private var sourceSyncNotice: String?
     #if DEBUG
     private static func ensureDevelopmentImportSources(
         in repository: ImportSourceRepository,
@@ -276,6 +280,7 @@ final class AppState: ObservableObject {
             migrations.register(.imageHashesSchema)
             migrations.register(.collectionSortIndexSchema)
             migrations.register(.organizationRulesSchema)
+            migrations.register(.originalPathSchema)
             try migrations.runPending(on: db)
 
             let repo = ScreenshotRepository(database: db)
@@ -386,6 +391,7 @@ final class AppState: ObservableObject {
         )
         self.thumbnailProvider = MacThumbnailProvider(library: library)
         self.fileActionService = MacFileActionService()
+        self.sourceFolderSyncService = SourceFolderSyncService(libraryRootURL: library.libraryRootURL)
 
         // Real rows take precedence. An empty database now renders an empty
         // library instead of mixing runtime demo cards into real-data mode.
@@ -440,6 +446,7 @@ final class AppState: ObservableObject {
         }
         print("[AppState] init instance:", ObjectIdentifier(self), "mock=\(isUsingMockData)")
         startAutoImport()
+        validateSourceFilesOnLaunchIfNeeded()
         startOCRQueue()
         startCodeDetectionQueue()
         rebuildMissingDuplicateHashes()
@@ -464,6 +471,11 @@ final class AppState: ObservableObject {
            isAutoImportEnabled != preferences.autoImportEnabled {
             isAutoImportEnabled = preferences.autoImportEnabled
         }
+        logSourceSyncPreferenceChanges(oldValue: oldValue)
+        if (!oldValue.syncTrashInboxItemWhenOriginalDeleted && preferences.syncTrashInboxItemWhenOriginalDeleted) ||
+            (!oldValue.syncRenameInboxItemWhenOriginalRenamed && preferences.syncRenameInboxItemWhenOriginalRenamed) {
+            validateSourceFilesOnLaunchIfNeeded()
+        }
         if oldValue.gridThumbnailSize != preferences.gridThumbnailSize,
            gridThumbnailSize != preferences.gridThumbnailSize {
             gridThumbnailSize = preferences.gridThumbnailSize
@@ -479,6 +491,32 @@ final class AppState: ObservableObject {
         #if DEBUG
         if oldValue.showDebugControls != preferences.showDebugControls {
             showDebugControls = preferences.showDebugControls
+        }
+        #endif
+    }
+
+    private func logSourceSyncPreferenceChanges(oldValue: AppPreferences) {
+        #if DEBUG
+        if oldValue.syncRenameOriginalSourceFiles != preferences.syncRenameOriginalSourceFiles {
+            print("[SourceSync] syncRenameOriginalSourceFiles=\(preferences.syncRenameOriginalSourceFiles)")
+        }
+        if oldValue.syncMoveOriginalToTrashOnAppTrash != preferences.syncMoveOriginalToTrashOnAppTrash {
+            print("[SourceSync] syncMoveOriginalToTrashOnAppTrash=\(preferences.syncMoveOriginalToTrashOnAppTrash)")
+        }
+        if oldValue.syncMoveOriginalToTrashOnPermanentDelete != preferences.syncMoveOriginalToTrashOnPermanentDelete {
+            print("[SourceSync] syncMoveOriginalToTrashOnPermanentDelete=\(preferences.syncMoveOriginalToTrashOnPermanentDelete)")
+        }
+        if oldValue.syncTrashInboxItemWhenOriginalDeleted != preferences.syncTrashInboxItemWhenOriginalDeleted {
+            print("[SourceSync] syncTrashInboxItemWhenOriginalDeleted=\(preferences.syncTrashInboxItemWhenOriginalDeleted)")
+        }
+        if oldValue.syncRenameInboxItemWhenOriginalRenamed != preferences.syncRenameInboxItemWhenOriginalRenamed {
+            print("[SourceSync] syncRenameInboxItemWhenOriginalRenamed=\(preferences.syncRenameInboxItemWhenOriginalRenamed)")
+        }
+        if oldValue.copyNewImportsToDefaultSourceFolder != preferences.copyNewImportsToDefaultSourceFolder {
+            print("[SourceSync] copyNewImportsToDefaultSourceFolder=\(preferences.copyNewImportsToDefaultSourceFolder)")
+        }
+        if oldValue.defaultSourceFolderPath != preferences.defaultSourceFolderPath {
+            print("[SourceSync] defaultSourceFolderPath=\(preferences.defaultSourceFolderPath)")
         }
         #endif
     }
@@ -1020,9 +1058,13 @@ final class AppState: ObservableObject {
                 }
             }
             let name = collectionName(forUUID: collectionUUID) ?? "Collection"
-            let n = ids.count
-            showToast("Added \(n) screenshot\(n == 1 ? "" : "s") to \(name)",
-                      kind: .success)
+            let n = newlyAddedIDs.count
+            if n > 0 {
+                showToast("Added \(n) screenshot\(n == 1 ? "" : "s") to \(name)",
+                          kind: .success)
+            } else {
+                showToast("Screenshots are already in \(name)", kind: .info)
+            }
         } catch {
             print("[AppState] add to collection failed: \(error)")
             showToast("Could not add to collection", kind: .info)
@@ -1369,9 +1411,14 @@ final class AppState: ObservableObject {
 
     func startAutoImport() {
         guard database != nil else { return }
-        autoImportService.start { [weak self] result in
-            self?.handleAutoImportResult(result)
-        }
+        autoImportService.start(
+            onResult: { [weak self] result in
+                self?.handleAutoImportResult(result)
+            },
+            onSourceFolderChanged: { [weak self] source in
+                self?.scheduleSourceFolderValidation(for: source)
+            }
+        )
         if !isAutoImportEnabled {
             autoImportService.stop()
         }
@@ -1648,6 +1695,161 @@ final class AppState: ObservableObject {
         autoImportService.scanEnabledSources()
     }
 
+    func checkSourceFileStatus() {
+        guard isExternalSourceSyncEnabled else {
+            showToast("Source sync is off", kind: .info)
+            return
+        }
+        validateMissingOriginalSources(in: knownSourceFolders(), showNoChanges: true)
+    }
+
+    private func validateSourceFilesOnLaunchIfNeeded() {
+        guard isExternalSourceSyncEnabled else { return }
+        sourceFolderSyncValidationTasks["launch"]?.cancel()
+        sourceFolderSyncValidationTasks["launch"] = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.validateMissingOriginalSources(in: self?.knownSourceFolders() ?? [], showNoChanges: false)
+            self?.sourceFolderSyncValidationTasks.removeValue(forKey: "launch")
+        }
+    }
+
+    private func scheduleSourceFolderValidation(for source: ImportSource) {
+        guard isExternalSourceSyncEnabled else { return }
+        let folderURL = URL(fileURLWithPath: source.folderPath, isDirectory: true).standardizedFileURL
+        guard !isInsideLibrary(folderURL) else { return }
+        let key = folderURL.path
+        sourceFolderSyncValidationTasks[key]?.cancel()
+        sourceFolderSyncValidationTasks[key] = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.validateMissingOriginalSources(in: [folderURL], showNoChanges: false)
+            self?.sourceFolderSyncValidationTasks.removeValue(forKey: key)
+        }
+    }
+
+    private func validateMissingOriginalSources(in sourceFolders: [URL], showNoChanges: Bool) {
+        guard isExternalSourceSyncEnabled else { return }
+        #if DEBUG
+        print("[SourceSync] checking external source files")
+        print("[SourceSync] external deletion sync enabled=\(preferences.syncTrashInboxItemWhenOriginalDeleted)")
+        print("[SourceSync] external rename sync enabled=\(preferences.syncRenameInboxItemWhenOriginalRenamed)")
+        #endif
+        let changes: SourceFolderSyncChanges
+        do {
+            changes = try sourceFolderSyncService.reconcileOriginalSourceChanges(
+                in: allScreenshots,
+                scopedToSourceFolders: sourceFolders,
+                detectRenamesByHash: preferences.syncRenameInboxItemWhenOriginalRenamed
+            )
+        } catch {
+            print("[SourceSync] external source validation failed: \(error)")
+            return
+        }
+
+        if preferences.syncRenameInboxItemWhenOriginalRenamed {
+            applyExternalSourceRenames(changes.renamed)
+        }
+
+        let missingCandidates = preferences.syncTrashInboxItemWhenOriginalDeleted ? changes.missing : []
+        for screenshot in missingCandidates {
+            print("[SourceSync] missing original uuid=\(screenshot.uuidString) path=\(screenshot.originalPath ?? "nil")")
+        }
+        guard !missingCandidates.isEmpty else {
+            if showNoChanges {
+                showToast("Source file status is up to date", kind: .success)
+            }
+            return
+        }
+        let moved = moveMissingOriginalScreenshotsToAppTrash(missingCandidates)
+        guard moved > 0 else { return }
+        let suffix = moved == 1 ? "" : "s"
+        showToast(
+            "Moved \(moved) screenshot\(suffix) to Trash because \(moved == 1 ? "its original source file was" : "their original source files were") deleted.",
+            kind: .success
+        )
+    }
+
+    private func moveMissingOriginalScreenshotsToAppTrash(_ screenshots: [Screenshot]) -> Int {
+        let targets = screenshots.filter { !$0.isTrashed }
+        guard !targets.isEmpty else { return 0 }
+        let ids = Set(targets.map(\.id))
+        let now = Date()
+        var realIDs: [UUID] = []
+        for id in ids {
+            screenshotsByID[id]?.isTrashed = true
+            screenshotsByID[id]?.trashDate = now
+            screenshotsByID[id]?.modifiedAt = now
+            if screenshotsByID[id]?.libraryPath != nil {
+                realIDs.append(id)
+            }
+        }
+        if !realIDs.isEmpty {
+            do {
+                try repository.markTrashed(ids: realIDs, trashed: true)
+                print("[SourceSync] moved missing originals to app trash ids=\(realIDs.map(\.uuidString))")
+                for id in realIDs {
+                    print("[SourceSync] moved app item to Trash because original missing uuid=\(id.uuidString.lowercased())")
+                }
+            } catch {
+                print("[SourceSync] app trash persist failed: \(error)")
+            }
+        }
+        objectWillChange.send()
+        refreshOrganizationState(pruneSelection: false)
+        refreshDuplicateGroups()
+        pruneSelectionToVisible()
+        print("[SourceSync] refresh counts inbox=\(inboxCount) favorites=\(favoriteCount) trash=\(trashCount)")
+        return targets.count
+    }
+
+    private func applyExternalSourceRenames(_ renames: [SourceFolderRenamedOriginal]) {
+        guard !renames.isEmpty else { return }
+        for rename in renames {
+            var updated = screenshotsByID[rename.screenshot.id] ?? rename.screenshot
+            print("[SourceSync] external source rename uuid=\(updated.uuidString) old=\(rename.oldOriginalURL.path) new=\(rename.newOriginalURL.path)")
+            updated.originalPath = rename.newOriginalURL.path
+            updated.sourceApp = rename.newOriginalURL.deletingLastPathComponent().path
+            updated.name = rename.newOriginalURL.lastPathComponent
+            updated.modifiedAt = Date()
+            do {
+                try repository.update(updated)
+                screenshotsByID[updated.id] = updated
+                print("[SourceSync] external rename reconciled uuid=\(updated.uuidString)")
+            } catch {
+                print("[SourceSync] external rename reconcile failed uuid=\(updated.uuidString) error=\(error)")
+            }
+        }
+        objectWillChange.send()
+        refreshOrganizationState(pruneSelection: false)
+        pruneSelectionToVisible()
+    }
+
+    private func knownSourceFolders() -> [URL] {
+        let fileManager = FileManager.default
+        let systemFolders = [
+            fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first,
+            fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        ].compactMap { $0 }
+        let watchedFolders = importSources
+            .filter(\.isEnabled)
+            .map { URL(fileURLWithPath: $0.folderPath, isDirectory: true) }
+        let linkedSourceFolders = allScreenshots
+            .compactMap { originalSourceURL(for: $0)?.deletingLastPathComponent() }
+        var seen = Set<String>()
+        return (systemFolders + watchedFolders + linkedSourceFolders)
+            .map { $0.standardizedFileURL }
+            .filter { url in
+                guard !isInsideLibrary(url), !seen.contains(url.path) else { return false }
+                seen.insert(url.path)
+                return true
+            }
+    }
+
+    private var isExternalSourceSyncEnabled: Bool {
+        preferences.syncTrashInboxItemWhenOriginalDeleted || preferences.syncRenameInboxItemWhenOriginalRenamed
+    }
+
     private func handleAutoImportResult(_ result: AutoImportResult) {
         applyImportResult(result.importResult, selectImported: false)
         refreshImportSources(reloadWatchers: false)
@@ -1655,7 +1857,9 @@ final class AppState: ObservableObject {
         print("[AutoImport] refresh complete")
         #endif
         let imported = result.importResult.imported.count
-        if imported > 0 {
+        if let notice = takeSourceSyncNotice() {
+            showToast(notice, kind: sourceSyncToastKind(for: notice))
+        } else if imported > 0 {
             showToast("Auto-imported \(imported) screenshot\(imported == 1 ? "" : "s")", kind: .success)
         } else if result.importResult.duplicates > 0 {
             showToast("\(result.importResult.duplicates) duplicate\(result.importResult.duplicates == 1 ? "" : "s") skipped", kind: .info)
@@ -1712,6 +1916,7 @@ final class AppState: ObservableObject {
     /// Plain Escape from anywhere — single entry point for "clear selection".
     func clearScreenshotSelection() {
         print("[AppState] clearScreenshotSelection; instance=\(ObjectIdentifier(self))")
+        clearCutState()
         selection.clear()
         logSelectionChange(source: "clear")
     }
@@ -1752,6 +1957,11 @@ final class AppState: ObservableObject {
         if closeOverlayIfPresent() { return true }
         if !selection.isEmpty {
             clearScreenshotSelection()
+            return true
+        }
+        if !cutScreenshotIDs.isEmpty {
+            clearCutState()
+            objectWillChange.send()
             return true
         }
         return false
@@ -1853,6 +2063,7 @@ final class AppState: ObservableObject {
     func trash(ids: Set<UUID>) {
         guard !ids.isEmpty else { return }
         let undoIDs = ids.filter { screenshotsByID[$0]?.isTrashed == false }
+        let targets = ids.compactMap { screenshotsByID[$0] }.filter { !$0.isTrashed }
         let now = Date()
         var realIDs: [UUID] = []
         for id in ids {
@@ -1876,6 +2087,12 @@ final class AppState: ObservableObject {
         refreshDuplicateGroups()
         pruneSelectionToVisible()
         print("[AppState] refresh counts inbox=\(inboxCount) favorites=\(favoriteCount) trash=\(trashCount)")
+        if preferences.syncMoveOriginalToTrashOnAppTrash {
+            let result = moveOriginalSourcesToMacTrash(targets)
+            showToast(sourceTrashMessage(prefix: "Moved screenshot to Trash", result: result), kind: result.failures > 0 ? .info : .success)
+        } else {
+            showToast("Moved \(targets.count) screenshot\(targets.count == 1 ? "" : "s") to Trash", kind: .success)
+        }
         if !isPerformingUndo, !undoIDs.isEmpty {
             registerUndo(title: "Move to Trash") { [weak self] in
                 self?.untrash(ids: undoIDs)
@@ -1968,6 +2185,9 @@ final class AppState: ObservableObject {
             showToast("Could not delete permanently", kind: .info)
             return
         }
+        let sourceTrashResult = preferences.syncMoveOriginalToTrashOnPermanentDelete
+            ? moveOriginalSourcesToMacTrash(targets)
+            : nil
         for screenshot in targets {
             removeManagedFiles(for: screenshot)
         }
@@ -1981,7 +2201,11 @@ final class AppState: ObservableObject {
         refreshDetectedCodes()
         refreshDuplicateGroups()
         objectWillChange.send()
-        showToast("Permanently deleted \(targets.count) screenshot\(targets.count == 1 ? "" : "s")", kind: .success)
+        if let sourceTrashResult {
+            showToast(sourceTrashMessage(prefix: "Permanently deleted \(targets.count) screenshot\(targets.count == 1 ? "" : "s")", result: sourceTrashResult), kind: sourceTrashResult.failures > 0 ? .info : .success)
+        } else {
+            showToast("Permanently deleted \(targets.count) screenshot\(targets.count == 1 ? "" : "s")", kind: .success)
+        }
     }
 
     var permanentDeleteAlertTitle: String {
@@ -1990,7 +2214,13 @@ final class AppState: ObservableObject {
 
     var permanentDeleteAlertMessage: String {
         let n = permanentDeleteTargetCount
-        return "\(n) managed Screenshot Inbox cop\(n == 1 ? "y" : "ies") will be permanently deleted. Original source files outside the managed library are not deleted. This cannot be undone."
+        var message = "\(n) managed Screenshot Inbox cop\(n == 1 ? "y" : "ies") will be permanently deleted. This cannot be undone."
+        if preferences.syncMoveOriginalToTrashOnPermanentDelete {
+            message += "\n\nAlso move original source files to macOS Trash? Original source files will be moved to macOS Trash, not permanently deleted."
+        } else {
+            message += " Original source files outside the managed library are not deleted."
+        }
+        return message
     }
 
     var permanentDeleteConfirmButtonTitle: String {
@@ -2196,7 +2426,9 @@ final class AppState: ObservableObject {
 
         applyImportResult(result, selectImported: selectImported)
 
-        if !result.imported.isEmpty || !result.replaced.isEmpty || result.keptDuplicateCopies > 0 {
+        if let notice = takeSourceSyncNotice() {
+            showToast(notice, kind: sourceSyncToastKind(for: notice))
+        } else if !result.imported.isEmpty || !result.replaced.isEmpty || result.keptDuplicateCopies > 0 {
             showToast(Self.importSummary(
                 imported: result.imported.count,
                 duplicates: result.duplicates,
@@ -2237,6 +2469,9 @@ final class AppState: ObservableObject {
         for shot in result.replaced {
             screenshotsByID[shot.id] = shot
         }
+        if preferences.copyNewImportsToDefaultSourceFolder, !result.imported.isEmpty {
+            copyUnstableOriginalImportsToDefaultSourceFolder(result.imported)
+        }
         if !result.imported.isEmpty {
             ocrQueueService.enqueue(result.imported)
             codeDetectionQueueService.enqueue(result.imported)
@@ -2273,6 +2508,7 @@ final class AppState: ObservableObject {
         }
         do {
             let count = try clipboardService.copyScreenshots(ids: ids)
+            clearCutState()
             showToast("Copied \(count) screenshot\(count == 1 ? "" : "s")", kind: .success)
         } catch {
             print("[Clipboard] copy failed: \(error)")
@@ -2283,6 +2519,15 @@ final class AppState: ObservableObject {
     func pasteClipboardIntoInbox() {
         Task { [weak self] in
             guard let self else { return }
+            let internalIDs = clipboardService.internalScreenshotIDs()
+            if !internalIDs.isEmpty {
+                handleInternalScreenshotPaste(
+                    ids: internalIDs,
+                    operation: clipboardService.clipboardOperation(),
+                    sourceCollectionUUID: clipboardService.sourceCollectionUUID()
+                )
+                return
+            }
             guard database != nil else {
                 showToast("Library unavailable — cannot import", kind: .info)
                 return
@@ -2295,7 +2540,9 @@ final class AppState: ObservableObject {
                 showToast("Importing clipboard image…", kind: .info)
                 let result = try await clipboardService.pasteIntoInbox()
                 applyImportResult(result, selectImported: true)
-                if !result.imported.isEmpty || !result.replaced.isEmpty || result.keptDuplicateCopies > 0 {
+                if let notice = takeSourceSyncNotice() {
+                    showToast(notice, kind: sourceSyncToastKind(for: notice))
+                } else if !result.imported.isEmpty || !result.replaced.isEmpty || result.keptDuplicateCopies > 0 {
                     showToast(Self.importSummary(
                         imported: result.imported.count,
                         duplicates: result.duplicates,
@@ -2320,14 +2567,311 @@ final class AppState: ObservableObject {
         }
     }
 
+    private func handleInternalScreenshotPaste(
+        ids: [UUID],
+        operation: ScreenshotClipboardOperation,
+        sourceCollectionUUID: String?
+    ) {
+        let validIDs = ids.filter { screenshotsByID[$0] != nil }
+        guard !validIDs.isEmpty else {
+            showToast("Screenshots are already in your library", kind: .info)
+            return
+        }
+
+        if operation == .cut {
+            handleInternalScreenshotCutPaste(ids: validIDs, sourceCollectionUUID: sourceCollectionUUID)
+            return
+        }
+
+        switch sidebarSelection {
+        case .collection(let collectionUUID):
+            guard isManualCollection(uuid: collectionUUID) else {
+                showToast("Screenshots are already in your library", kind: .info)
+                return
+            }
+            addScreenshots(ids: validIDs, toCollection: collectionUUID)
+        case .trash:
+            showToast("Cannot paste into Trash", kind: .info)
+        default:
+            showToast("Screenshots are already in your library", kind: .info)
+        }
+    }
+
     func cutSelectedScreenshotsToPasteboard() {
         let ids = selectedScreenshots.map(\.uuidString)
-        guard !ids.isEmpty else { return }
-        do {
-            try clipboardService.cutScreenshots(ids: ids)
-        } catch {
-            showToast("Cut is not available for screenshots", kind: .info)
+        guard !ids.isEmpty else {
+            showToast("No screenshots selected", kind: .info)
+            return
         }
+        do {
+            let selectedIDs = Set(selectedScreenshots.map(\.id))
+            let count = try clipboardService.cutScreenshots(
+                ids: ids,
+                source: clipboardSourceContext(),
+                to: .general
+            )
+            cutScreenshotIDs = selectedIDs
+            showToast("Cut \(count) screenshot\(count == 1 ? "" : "s"). Choose a collection and press Cmd+V.", kind: .info)
+        } catch {
+            print("[Clipboard] cut failed: \(error)")
+            showToast(error.localizedDescription, kind: .info)
+        }
+    }
+
+    private func handleInternalScreenshotCutPaste(ids: [UUID], sourceCollectionUUID: String?) {
+        switch sidebarSelection {
+        case .collection(let targetCollectionUUID):
+            guard isManualCollection(uuid: targetCollectionUUID) else {
+                showToast("Choose a collection to move screenshots", kind: .info)
+                return
+            }
+            moveCutScreenshots(
+                ids: ids,
+                sourceCollectionUUID: sourceCollectionUUID,
+                targetCollectionUUID: targetCollectionUUID
+            )
+        case .trash:
+            showToast("Cannot paste into Trash", kind: .info)
+        default:
+            showToast("Choose a collection to move screenshots", kind: .info)
+        }
+    }
+
+    private func moveCutScreenshots(
+        ids: [UUID],
+        sourceCollectionUUID: String?,
+        targetCollectionUUID: String
+    ) {
+        let targetExistingIDs = collectionScreenshotIDsByUUID[targetCollectionUUID] ?? []
+        let newlyAddedTargetIDs = ids.filter { !targetExistingIDs.contains($0) }
+        let sourceUUID = sourceCollectionUUID.flatMap { isManualCollection(uuid: $0) ? $0 : nil }
+        let sourceExistingIDs = sourceUUID.flatMap { collectionScreenshotIDsByUUID[$0] } ?? []
+        let removedSourceIDs = sourceUUID == nil || sourceUUID == targetCollectionUUID
+            ? []
+            : ids.filter { sourceExistingIDs.contains($0) }
+        let screenshotUUIDs = ids.map { $0.uuidString.lowercased() }
+
+        do {
+            try collectionRepository.addScreenshots(screenshotUUIDs, toCollection: targetCollectionUUID)
+            if let sourceUUID, sourceUUID != targetCollectionUUID, !removedSourceIDs.isEmpty {
+                try collectionRepository.removeScreenshots(
+                    removedSourceIDs.map { $0.uuidString.lowercased() },
+                    fromCollection: sourceUUID
+                )
+            }
+            refreshOrganizationState(pruneSelection: false)
+            if !isPerformingUndo, (!newlyAddedTargetIDs.isEmpty || !removedSourceIDs.isEmpty) {
+                registerUndo(title: "Move to Collection") { [weak self] in
+                    self?.undoCollectionMove(
+                        addedTargetIDs: newlyAddedTargetIDs,
+                        targetCollectionUUID: targetCollectionUUID,
+                        removedSourceIDs: removedSourceIDs,
+                        sourceCollectionUUID: sourceUUID
+                    )
+                }
+            }
+            clearCutState()
+            let name = collectionName(forUUID: targetCollectionUUID) ?? "Collection"
+            showToast("Moved \(ids.count) screenshot\(ids.count == 1 ? "" : "s") to \(name)", kind: .success)
+        } catch {
+            print("[Clipboard] internal move failed: \(error)")
+            showToast("Could not move screenshots", kind: .info)
+        }
+    }
+
+    private func undoCollectionMove(
+        addedTargetIDs: [UUID],
+        targetCollectionUUID: String,
+        removedSourceIDs: [UUID],
+        sourceCollectionUUID: String?
+    ) {
+        performUndoMutation {
+            do {
+                if !addedTargetIDs.isEmpty {
+                    try collectionRepository.removeScreenshots(
+                        addedTargetIDs.map { $0.uuidString.lowercased() },
+                        fromCollection: targetCollectionUUID
+                    )
+                }
+                if let sourceCollectionUUID, !removedSourceIDs.isEmpty {
+                    try collectionRepository.addScreenshots(
+                        removedSourceIDs.map { $0.uuidString.lowercased() },
+                        toCollection: sourceCollectionUUID
+                    )
+                }
+                refreshOrganizationState(pruneSelection: false)
+                showToast("Undid Move to Collection", kind: .success)
+            } catch {
+                print("[Undo] collection move failed: \(error)")
+                showToast("Could not undo Move to Collection", kind: .info)
+            }
+        }
+    }
+
+    private func clipboardSourceContext() -> ScreenshotClipboardSourceContext {
+        let sourceCollectionUUID: String?
+        if case .collection(let uuid)? = sidebarSelection, isManualCollection(uuid: uuid) {
+            sourceCollectionUUID = uuid
+        } else {
+            sourceCollectionUUID = nil
+        }
+        return ScreenshotClipboardSourceContext(
+            sidebarSelection: sidebarSelection,
+            collectionUUID: sourceCollectionUUID
+        )
+    }
+
+    private func clearCutState() {
+        if !cutScreenshotIDs.isEmpty {
+            cutScreenshotIDs = []
+        }
+    }
+
+    private func takeSourceSyncNotice() -> String? {
+        let notice = sourceSyncNotice
+        sourceSyncNotice = nil
+        return notice
+    }
+
+    private func sourceSyncToastKind(for notice: String) -> ToastMessage.Kind {
+        notice.contains("could not") || notice.contains("missing") || notice.contains("unavailable") || notice.contains("already exists")
+            ? .info
+            : .success
+    }
+
+    private struct SourceTrashResult {
+        var moved = 0
+        var missing = 0
+        var unavailable = 0
+        var failures = 0
+    }
+
+    private func sourceTrashMessage(prefix: String, result: SourceTrashResult) -> String {
+        if result.moved > 0 {
+            return "\(prefix) and moved original file\(result.moved == 1 ? "" : "s") to macOS Trash."
+        }
+        if result.missing > 0 {
+            return "\(prefix). Original source file was already missing."
+        }
+        if result.unavailable > 0 {
+            return "\(prefix). Original source path is unavailable."
+        }
+        if result.failures > 0 {
+            return "\(prefix), but original source file could not be moved to macOS Trash."
+        }
+        return prefix
+    }
+
+    private func moveOriginalSourcesToMacTrash(_ screenshots: [Screenshot]) -> SourceTrashResult {
+        var result = SourceTrashResult()
+        let fileManager = FileManager.default
+        for screenshot in screenshots {
+            print("[SourceSync] app trash uuid=\(screenshot.uuidString)")
+            print("[SourceSync] source trash enabled=true")
+            guard let originalURL = originalSourceURL(for: screenshot) else {
+                print("[SourceSync] source trash failed: no original source path")
+                result.unavailable += 1
+                continue
+            }
+            guard fileManager.fileExists(atPath: originalURL.path) else {
+                print("[SourceSync] source trash failed: missing path=\(originalURL.path)")
+                result.missing += 1
+                continue
+            }
+            do {
+                var trashedURL: NSURL?
+                print("[SourceSync] moving source to macOS Trash path=\(originalURL.path)")
+                try fileManager.trashItem(at: originalURL, resultingItemURL: &trashedURL)
+                print("[SourceSync] source trash succeeded resultingURL=\(trashedURL?.path ?? "nil")")
+                result.moved += 1
+            } catch {
+                print("[SourceSync] trash original failed path=\(originalURL.path) error=\(error)")
+                print("[SourceSync] source trash failed: \(error)")
+                result.failures += 1
+            }
+        }
+        return result
+    }
+
+    private func copyUnstableOriginalImportsToDefaultSourceFolder(_ imported: [Screenshot]) {
+        let targetFolder = expandedSourceFolderURL(preferences.defaultSourceFolderPath)
+        let fileManager = FileManager.default
+        do {
+            try fileManager.createDirectory(at: targetFolder, withIntermediateDirectories: true)
+        } catch {
+            print("[SourceSync] default folder unavailable: \(error)")
+            sourceSyncNotice = "Imported screenshot, but the default source folder is unavailable."
+            return
+        }
+
+        var copied = 0
+        for screenshot in imported where !hasStableOriginalPath(screenshot) {
+            guard let managedURL = managedOriginalURL(for: screenshot),
+                  fileManager.fileExists(atPath: managedURL.path) else { continue }
+            let destination = uniqueSourceCopyURL(
+                in: targetFolder,
+                filename: screenshot.name.isEmpty ? managedURL.lastPathComponent : screenshot.name
+            )
+            do {
+                try fileManager.copyItem(at: managedURL, to: destination)
+                var updated = screenshotsByID[screenshot.id] ?? screenshot
+                updated.originalPath = destination.path
+                updated.sourceApp = destination.deletingLastPathComponent().path
+                updated.modifiedAt = Date()
+                try repository.update(updated)
+                screenshotsByID[updated.id] = updated
+                copied += 1
+            } catch {
+                print("[SourceSync] default source copy failed: \(error)")
+            }
+        }
+        if copied > 0 {
+            sourceSyncNotice = "Imported screenshot and copied it to \(targetFolder.lastPathComponent)."
+        }
+    }
+
+    private func originalSourceURL(for screenshot: Screenshot) -> URL? {
+        guard let path = screenshot.originalPath, !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+    }
+
+    private func managedOriginalURL(for screenshot: Screenshot) -> URL? {
+        guard let libraryPath = screenshot.libraryPath, !libraryPath.isEmpty else { return nil }
+        return libraryPath.hasPrefix("/")
+            ? URL(fileURLWithPath: libraryPath)
+            : library.libraryRootURL.appendingPathComponent(libraryPath)
+    }
+
+    private func hasStableOriginalPath(_ screenshot: Screenshot) -> Bool {
+        guard let url = originalSourceURL(for: screenshot),
+              FileManager.default.fileExists(atPath: url.path) else {
+            return false
+        }
+        let temp = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        return path != temp && !path.hasPrefix(temp + "/") && !isManagedLibraryURL(url)
+    }
+
+    private func expandedSourceFolderURL(_ path: String) -> URL {
+        URL(fileURLWithPath: (path.isEmpty ? "~/Desktop" : path as NSString).expandingTildeInPath, isDirectory: true)
+    }
+
+    private func uniqueSourceCopyURL(in folder: URL, filename: String) -> URL {
+        let fileManager = FileManager.default
+        let url = URL(fileURLWithPath: filename)
+        let ext = url.pathExtension
+        let stem = ext.isEmpty ? filename : String(filename.dropLast(ext.count + 1))
+        func candidate(_ suffix: Int?) -> URL {
+            let name = suffix.map { "\(stem) \($0)" } ?? stem
+            return folder.appendingPathComponent(ext.isEmpty ? name : "\(name).\(ext)")
+        }
+        var destination = candidate(nil)
+        var index = 2
+        while fileManager.fileExists(atPath: destination.path) {
+            destination = candidate(index)
+            index += 1
+        }
+        return destination
     }
 
     private static func importSummary(
@@ -2654,6 +3198,20 @@ final class AppState: ObservableObject {
         return panel.runModal() == .OK ? panel.urls.first : nil
     }
 
+    func chooseDefaultSourceFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Folder"
+        panel.message = "Choose where Screenshot Inbox should copy newly added screenshots."
+        if panel.runModal() == .OK, let url = panel.urls.first {
+            preferences.defaultSourceFolderPath = url.path
+            showToast("Default source folder updated", kind: .success)
+        }
+    }
+
     private func chooseExportFile(title: String, filename: String) -> URL? {
         let panel = NSSavePanel()
         panel.title = title
@@ -2772,11 +3330,20 @@ final class AppState: ObservableObject {
         let previous = updated
         #if DEBUG
         print("[Rename] requested uuid=\(id.uuidString.lowercased()) newName=\(trimmed)")
+        print("[SourceSync] rename app item uuid=\(id.uuidString.lowercased())")
         #endif
         do {
             if updated.libraryPath != nil {
                 let oldLibraryPath = updated.libraryPath
+                let oldManagedPath = oldLibraryPath.map { library.libraryRootURL.appendingPathComponent($0).path }
                 updated = try renamedManagedCopy(updated, requestedName: trimmed)
+                #if DEBUG
+                if let oldManagedPath {
+                    let newManagedPath = updated.libraryPath.map { library.libraryRootURL.appendingPathComponent($0).path } ?? "nil"
+                    print("[SourceSync] managed rename old=\(oldManagedPath) new=\(newManagedPath)")
+                }
+                #endif
+                syncOriginalRenameIfNeeded(&updated, requestedName: trimmed)
                 do {
                     try repository.update(updated)
                 } catch {
@@ -2801,7 +3368,11 @@ final class AppState: ObservableObject {
             print("[Rename] AppState updated")
             print("[Rename] inspector selected filename=\(primarySelection?.name ?? "nil")")
             #endif
-            showToast("Renamed", kind: .success)
+            if let notice = takeSourceSyncNotice() {
+                showToast(notice, kind: sourceSyncToastKind(for: notice))
+            } else {
+                showToast("Renamed", kind: .success)
+            }
         } catch RenameError.managedFileMissing {
             showToast("Managed file not found", kind: .info)
         } catch {
@@ -2834,6 +3405,51 @@ final class AppState: ObservableObject {
         updated.name = targetURL.lastPathComponent
         updated.modifiedAt = Date()
         return updated
+    }
+
+    private func syncOriginalRenameIfNeeded(_ shot: inout Screenshot, requestedName: String) {
+        #if DEBUG
+        print("[SourceSync] source rename enabled=\(preferences.syncRenameOriginalSourceFiles)")
+        #endif
+        guard preferences.syncRenameOriginalSourceFiles else { return }
+        let fileManager = FileManager.default
+        guard let originalURL = originalSourceURL(for: shot) else {
+            sourceSyncNotice = "Renamed in Screenshot Inbox, but original source path is unavailable."
+            print("[SourceSync] source rename failed: no original source path")
+            return
+        }
+        guard fileManager.fileExists(atPath: originalURL.path) else {
+            sourceSyncNotice = "Renamed in Screenshot Inbox, but original source file was already missing."
+            print("[SourceSync] source rename failed: missing original path=\(originalURL.path)")
+            return
+        }
+        let ext = originalURL.pathExtension
+        let baseName = sanitizedFileBaseName(from: requestedName, fallback: originalURL.deletingPathExtension().lastPathComponent)
+        let targetURL = originalURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(ext.isEmpty ? baseName : "\(baseName).\(ext)")
+        print("[SourceSync] source rename old=\(originalURL.path) new=\(targetURL.path)")
+        guard targetURL != originalURL else {
+            sourceSyncNotice = "Renamed screenshot and original source file."
+            print("[SourceSync] source rename succeeded")
+            return
+        }
+        guard !fileManager.fileExists(atPath: targetURL.path) else {
+            sourceSyncNotice = "Original file could not be renamed because a file with that name already exists."
+            print("[SourceSync] source rename failed: target exists path=\(targetURL.path)")
+            return
+        }
+        do {
+            try fileManager.moveItem(at: originalURL, to: targetURL)
+            shot.originalPath = targetURL.path
+            shot.sourceApp = targetURL.deletingLastPathComponent().path
+            sourceSyncNotice = "Renamed screenshot and original source file."
+            print("[SourceSync] source rename succeeded")
+        } catch {
+            print("[SourceSync] rename original failed path=\(originalURL.path) error=\(error)")
+            print("[SourceSync] source rename failed: \(error)")
+            sourceSyncNotice = "Renamed in Screenshot Inbox, but the original source file could not be renamed."
+        }
     }
 
     private func sanitizedFileBaseName(from name: String, fallback: String) -> String {

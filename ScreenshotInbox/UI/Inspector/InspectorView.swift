@@ -116,7 +116,7 @@ struct InspectorView: View {
         case .metadata:
             MetadataSectionView(
                 screenshot: shot,
-                originalPath: appState.thumbnailProvider.originalURL(for: shot)?.path
+                originalPath: shot.originalPath
             )
         case .ocr:
             OCRSectionView(screenshot: shot)

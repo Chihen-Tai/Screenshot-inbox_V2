@@ -14,6 +14,7 @@ final class AutoImportService {
     private let fileManager: FileManager
     private var pendingTasks: [String: Task<Void, Never>] = [:]
     private var onResult: (@MainActor (AutoImportResult) -> Void)?
+    private var onSourceFolderChanged: (@MainActor (ImportSource) -> Void)?
 
     init(
         importService: ImportService,
@@ -37,8 +38,12 @@ final class AutoImportService {
         self.fileManager = .default
     }
 
-    func start(onResult: @escaping @MainActor (AutoImportResult) -> Void) {
+    func start(
+        onResult: @escaping @MainActor (AutoImportResult) -> Void,
+        onSourceFolderChanged: (@MainActor (ImportSource) -> Void)? = nil
+    ) {
         self.onResult = onResult
+        self.onSourceFolderChanged = onSourceFolderChanged
         reloadWatchers()
     }
 
@@ -50,6 +55,7 @@ final class AutoImportService {
             fileWatcher.replaceWatchedSources(sources) { [weak self] source, urls in
                 Task { @MainActor in
                     self?.handleDetectedURLs(urls, from: source)
+                    self?.onSourceFolderChanged?(source)
                 }
             }
             debugLog("watching \(sources.count) source(s)")
@@ -71,6 +77,7 @@ final class AutoImportService {
                 let folder = URL(fileURLWithPath: source.folderPath, isDirectory: true)
                 guard !isLibraryOrInsideLibrary(folder) else { continue }
                 handleDetectedURLs(candidateURLs(in: folder), from: source, requireEnabledSince: false)
+                onSourceFolderChanged?(source)
             }
         } catch {
             print("[AutoImport] scan failed: \(error)")

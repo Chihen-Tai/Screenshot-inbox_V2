@@ -94,11 +94,11 @@ final class ScreenshotRepository {
         try database.queue.sync {
             let stmt = try database.prepare("""
             INSERT INTO screenshots(
-                uuid, filename, library_path, file_hash,
+                uuid, filename, library_path, file_hash, original_path,
                 width, height, file_size, format, source_app,
                 created_at, imported_at, modified_at,
                 is_favorite, is_trashed, trash_date, sort_index
-            ) VALUES (?,?,?,?, ?,?,?,?,?, ?,?,?, ?,?,?,?);
+            ) VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?, ?,?,?,?);
             """)
             try Self.bindRow(shot, into: stmt)
             _ = try stmt.step()
@@ -111,7 +111,7 @@ final class ScreenshotRepository {
         try database.queue.sync {
             let stmt = try database.prepare("""
             UPDATE screenshots SET
-                filename = ?, library_path = ?, file_hash = ?,
+                filename = ?, library_path = ?, file_hash = ?, original_path = ?,
                 width = ?, height = ?, file_size = ?, format = ?, source_app = ?,
                 created_at = ?, imported_at = ?, modified_at = ?,
                 is_favorite = ?, is_trashed = ?, trash_date = ?, sort_index = ?
@@ -120,19 +120,20 @@ final class ScreenshotRepository {
             try stmt.bind(1,  shot.name)
             try stmt.bind(2,  shot.libraryPath ?? "")
             try stmt.bind(3,  shot.fileHash ?? "")
-            try stmt.bind(4,  shot.pixelWidth)
-            try stmt.bind(5,  shot.pixelHeight)
-            try stmt.bind(6,  shot.byteSize)
-            try stmt.bind(7,  shot.format)
-            try stmt.bind(8,  shot.sourceApp)
-            try stmt.bind(9,  shot.createdAt.timeIntervalSince1970)
-            try stmt.bind(10, (shot.importedAt ?? shot.createdAt).timeIntervalSince1970)
-            try stmt.bind(11, Date().timeIntervalSince1970)
-            try stmt.bindBool(12, shot.isFavorite)
-            try stmt.bindBool(13, shot.isTrashed)
-            try stmt.bind(14, shot.trashDate?.timeIntervalSince1970)
-            try stmt.bind(15, shot.sortIndex ?? 0)
-            try stmt.bind(16, shot.uuidString)
+            try stmt.bind(4,  shot.originalPath)
+            try stmt.bind(5,  shot.pixelWidth)
+            try stmt.bind(6,  shot.pixelHeight)
+            try stmt.bind(7,  shot.byteSize)
+            try stmt.bind(8,  shot.format)
+            try stmt.bind(9,  shot.sourceApp)
+            try stmt.bind(10, shot.createdAt.timeIntervalSince1970)
+            try stmt.bind(11, (shot.importedAt ?? shot.createdAt).timeIntervalSince1970)
+            try stmt.bind(12, Date().timeIntervalSince1970)
+            try stmt.bindBool(13, shot.isFavorite)
+            try stmt.bindBool(14, shot.isTrashed)
+            try stmt.bind(15, shot.trashDate?.timeIntervalSince1970)
+            try stmt.bind(16, shot.sortIndex ?? 0)
+            try stmt.bind(17, shot.uuidString)
             _ = try stmt.step()
         }
     }
@@ -263,7 +264,7 @@ final class ScreenshotRepository {
     /// Column order MUST match the `columnXxx(_:)` indices in `row(from:)`.
     static let selectColumns = """
     SELECT
-        screenshots.uuid, screenshots.filename, screenshots.library_path, screenshots.file_hash,
+        screenshots.uuid, screenshots.filename, screenshots.library_path, screenshots.file_hash, screenshots.original_path,
         screenshots.width, screenshots.height, screenshots.file_size, screenshots.format, screenshots.source_app,
         screenshots.created_at, screenshots.imported_at, screenshots.modified_at,
         screenshots.is_favorite, screenshots.is_trashed, screenshots.trash_date, screenshots.sort_index
@@ -276,18 +277,19 @@ final class ScreenshotRepository {
         let filename     = s.columnString(1) ?? ""
         let libraryPath  = s.columnString(2)
         let fileHash     = s.columnString(3)
-        let width        = Int(s.columnInt(4))
-        let height       = Int(s.columnInt(5))
-        let fileSize     = Int(s.columnInt(6))
-        let format       = s.columnString(7) ?? ""
-        let sourceApp    = s.columnString(8)
-        let createdAt    = Date(timeIntervalSince1970: s.columnDouble(9))
-        let importedAt   = Date(timeIntervalSince1970: s.columnDouble(10))
-        let modifiedAt   = Date(timeIntervalSince1970: s.columnDouble(11))
-        let isFavorite   = s.columnInt(12) != 0
-        let isTrashed    = s.columnInt(13) != 0
-        let trashDate    = s.columnIsNull(14) ? nil : Date(timeIntervalSince1970: s.columnDouble(14))
-        let sortIndex    = Int(s.columnInt(15))
+        let originalPath = s.columnString(4)
+        let width        = Int(s.columnInt(5))
+        let height       = Int(s.columnInt(6))
+        let fileSize     = Int(s.columnInt(7))
+        let format       = s.columnString(8) ?? ""
+        let sourceApp    = s.columnString(9)
+        let createdAt    = Date(timeIntervalSince1970: s.columnDouble(10))
+        let importedAt   = Date(timeIntervalSince1970: s.columnDouble(11))
+        let modifiedAt   = Date(timeIntervalSince1970: s.columnDouble(12))
+        let isFavorite   = s.columnInt(13) != 0
+        let isTrashed    = s.columnInt(14) != 0
+        let trashDate    = s.columnIsNull(15) ? nil : Date(timeIntervalSince1970: s.columnDouble(15))
+        let sortIndex    = Int(s.columnInt(16))
 
         return Screenshot(
             id: id,
@@ -308,6 +310,7 @@ final class ScreenshotRepository {
             importedAt: importedAt,
             modifiedAt: modifiedAt,
             sourceApp: sourceApp,
+            originalPath: originalPath,
             sortIndex: sortIndex,
             trashDate: trashDate
         )
@@ -318,17 +321,18 @@ final class ScreenshotRepository {
         try stmt.bind(2,  shot.name)
         try stmt.bind(3,  shot.libraryPath ?? "")
         try stmt.bind(4,  shot.fileHash ?? "")
-        try stmt.bind(5,  shot.pixelWidth)
-        try stmt.bind(6,  shot.pixelHeight)
-        try stmt.bind(7,  shot.byteSize)
-        try stmt.bind(8,  shot.format)
-        try stmt.bind(9,  shot.sourceApp)
-        try stmt.bind(10, shot.createdAt.timeIntervalSince1970)
-        try stmt.bind(11, (shot.importedAt ?? shot.createdAt).timeIntervalSince1970)
-        try stmt.bind(12, (shot.modifiedAt ?? shot.importedAt ?? shot.createdAt).timeIntervalSince1970)
-        try stmt.bindBool(13, shot.isFavorite)
-        try stmt.bindBool(14, shot.isTrashed)
-        try stmt.bind(15, shot.trashDate?.timeIntervalSince1970)
-        try stmt.bind(16, shot.sortIndex ?? 0)
+        try stmt.bind(5,  shot.originalPath)
+        try stmt.bind(6,  shot.pixelWidth)
+        try stmt.bind(7,  shot.pixelHeight)
+        try stmt.bind(8,  shot.byteSize)
+        try stmt.bind(9,  shot.format)
+        try stmt.bind(10, shot.sourceApp)
+        try stmt.bind(11, shot.createdAt.timeIntervalSince1970)
+        try stmt.bind(12, (shot.importedAt ?? shot.createdAt).timeIntervalSince1970)
+        try stmt.bind(13, (shot.modifiedAt ?? shot.importedAt ?? shot.createdAt).timeIntervalSince1970)
+        try stmt.bindBool(14, shot.isFavorite)
+        try stmt.bindBool(15, shot.isTrashed)
+        try stmt.bind(16, shot.trashDate?.timeIntervalSince1970)
+        try stmt.bind(17, shot.sortIndex ?? 0)
     }
 }

@@ -70,11 +70,13 @@ struct QuickFilterPreference: Hashable, Identifiable {
 struct AppPreferences: Hashable {
     var autoImportEnabled: Bool
     var defaultWatchedFoldersInitialized: Bool
-    var renameOriginalSourceFiles: Bool
-    var trashOriginalSourceFiles: Bool
-    var deleteOriginalSourceFiles: Bool
-    var copyNewScreenshotsToDefaultFolder: Bool
-    var defaultCopyFolderPath: String
+    var syncRenameOriginalSourceFiles: Bool
+    var syncMoveOriginalToTrashOnAppTrash: Bool
+    var syncMoveOriginalToTrashOnPermanentDelete: Bool
+    var syncTrashInboxItemWhenOriginalDeleted: Bool
+    var syncRenameInboxItemWhenOriginalRenamed: Bool
+    var copyNewImportsToDefaultSourceFolder: Bool
+    var defaultSourceFolderPath: String
     var inspectorVisibleByDefault: Bool
     var sidebarVisibleByDefault: Bool
     var sidebarPanelWidth: Double
@@ -107,11 +109,13 @@ struct AppPreferences: Hashable {
     static let defaults = AppPreferences(
         autoImportEnabled: true,
         defaultWatchedFoldersInitialized: false,
-        renameOriginalSourceFiles: false,
-        trashOriginalSourceFiles: false,
-        deleteOriginalSourceFiles: false,
-        copyNewScreenshotsToDefaultFolder: false,
-        defaultCopyFolderPath: "~/Desktop",
+        syncRenameOriginalSourceFiles: false,
+        syncMoveOriginalToTrashOnAppTrash: false,
+        syncMoveOriginalToTrashOnPermanentDelete: false,
+        syncTrashInboxItemWhenOriginalDeleted: false,
+        syncRenameInboxItemWhenOriginalRenamed: false,
+        copyNewImportsToDefaultSourceFolder: false,
+        defaultSourceFolderPath: "~/Desktop",
         inspectorVisibleByDefault: true,
         sidebarVisibleByDefault: true,
         sidebarPanelWidth: 220,

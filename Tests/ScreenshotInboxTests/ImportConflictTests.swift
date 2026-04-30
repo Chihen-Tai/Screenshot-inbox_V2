@@ -62,6 +62,19 @@ struct ImportConflictTests {
         #expect(try harness.tagRepository.fetchTags(forScreenshot: existing.uuidString).map(\.name) == ["important"])
         #expect(try harness.collectionRepository.fetchScreenshots(inCollection: collection.uuid).map(\.id) == [existing.id])
     }
+
+    @Test
+    func importStoresOriginalSourcePath() async throws {
+        let harness = try ImportHarness()
+        let source = try harness.makeImage(named: "source.png", bytes: [1, 2, 3, 4])
+
+        let result = await harness.importService.importURLs([source])
+        let imported = try #require(result.imported.first)
+        let stored = try #require(try harness.screenshotRepository.fetchByUUID(imported.id))
+
+        #expect(imported.originalPath == source.path)
+        #expect(stored.originalPath == source.path)
+    }
 }
 
 private struct FixedImportConflictResolver: ImportConflictResolving {

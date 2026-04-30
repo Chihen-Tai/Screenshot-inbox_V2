@@ -41,6 +41,8 @@ struct Screenshot: Identifiable, Hashable {
     var modifiedAt: Date? = nil
     /// Bundle identifier or human name of the originating app, when known.
     var sourceApp: String? = nil
+    /// Full path to the source file outside the managed library, if known.
+    var originalPath: String? = nil
     /// Optional explicit ordering hint.
     var sortIndex: Int? = nil
     /// Time the row was moved to trash. `nil` when not trashed.

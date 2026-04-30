@@ -116,6 +116,10 @@ final class ImportService: ScreenshotImporting {
 
         let now = Date()
         let relativePath = libraryRelativePath(for: destURL)
+        #if DEBUG
+        print("[SourceSync] imported managedPath=\(relativePath)")
+        print("[SourceSync] originalPath=\(url.path)")
+        #endif
 
         let shot = Screenshot(
             id: uuid,
@@ -136,6 +140,7 @@ final class ImportService: ScreenshotImporting {
             importedAt: now,
             modifiedAt: now,
             sourceApp: url.deletingLastPathComponent().path,
+            originalPath: url.path,
             sortIndex: 0,
             trashDate: nil
         )
@@ -179,6 +184,11 @@ final class ImportService: ScreenshotImporting {
         updated.libraryPath = libraryRelativePath(for: originalURL)
         updated.modifiedAt = Date()
         updated.sourceApp = url.deletingLastPathComponent().path
+        updated.originalPath = url.path
+        #if DEBUG
+        print("[SourceSync] imported managedPath=\(updated.libraryPath ?? "")")
+        print("[SourceSync] originalPath=\(url.path)")
+        #endif
         try repository.update(updated)
         return updated
     }

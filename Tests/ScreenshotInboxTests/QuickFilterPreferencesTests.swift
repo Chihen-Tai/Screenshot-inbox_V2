@@ -70,4 +70,39 @@ struct QuickFilterPreferencesTests {
         #expect(filters.contains(QuickFilterPreference(chip: .hasQRCode, isEnabled: false)))
         #expect(filters.contains(QuickFilterPreference(chip: .thisWeek, isEnabled: false)))
     }
+
+    @Test
+    func sourceFolderSyncPreferencesDefaultOffAndPersist() {
+        let suiteName = "ScreenshotInbox.SourceFolderSyncPreferencesTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = SettingsService(defaults: defaults)
+        var preferences = service.preferences
+        #expect(!preferences.syncRenameOriginalSourceFiles)
+        #expect(!preferences.syncMoveOriginalToTrashOnAppTrash)
+        #expect(!preferences.syncMoveOriginalToTrashOnPermanentDelete)
+        #expect(!preferences.syncTrashInboxItemWhenOriginalDeleted)
+        #expect(!preferences.syncRenameInboxItemWhenOriginalRenamed)
+        #expect(!preferences.copyNewImportsToDefaultSourceFolder)
+        #expect(preferences.defaultSourceFolderPath == "~/Desktop")
+
+        preferences.syncRenameOriginalSourceFiles = true
+        preferences.syncMoveOriginalToTrashOnAppTrash = true
+        preferences.syncMoveOriginalToTrashOnPermanentDelete = true
+        preferences.syncTrashInboxItemWhenOriginalDeleted = true
+        preferences.syncRenameInboxItemWhenOriginalRenamed = true
+        preferences.copyNewImportsToDefaultSourceFolder = true
+        preferences.defaultSourceFolderPath = "/tmp/ScreenshotInboxSourceSync"
+        service.save(preferences)
+
+        let reloaded = service.preferences
+        #expect(reloaded.syncRenameOriginalSourceFiles)
+        #expect(reloaded.syncMoveOriginalToTrashOnAppTrash)
+        #expect(reloaded.syncMoveOriginalToTrashOnPermanentDelete)
+        #expect(reloaded.syncTrashInboxItemWhenOriginalDeleted)
+        #expect(reloaded.syncRenameInboxItemWhenOriginalRenamed)
+        #expect(reloaded.copyNewImportsToDefaultSourceFolder)
+        #expect(reloaded.defaultSourceFolderPath == "/tmp/ScreenshotInboxSourceSync")
+    }
 }

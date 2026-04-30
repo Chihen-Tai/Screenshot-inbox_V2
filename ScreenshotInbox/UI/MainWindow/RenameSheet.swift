@@ -25,7 +25,7 @@ struct RenameSheet: View {
                     .font(.system(size: 13))
                     .focused($fieldFocused)
                     .onSubmit { appState.commitRename() }
-                Text("This renames the copy inside Screenshot Inbox. The original file is unchanged.")
+                Text("This always renames the managed Screenshot Inbox copy. Original source files are renamed only when Source Folder Sync is enabled.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.SemanticColor.tertiaryLabel)
                     .fixedSize(horizontal: false, vertical: true)

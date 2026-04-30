@@ -23,13 +23,13 @@ struct MacImportConflictResolver: ImportConflictResolving {
         Incoming: \(conflict.incomingFilename)
         Existing: \(conflict.existingFilename)
         """
-        alert.addButton(withTitle: "Skip")
         alert.addButton(withTitle: "Keep Both")
-        alert.addButton(withTitle: "Replace")
+        alert.addButton(withTitle: "Replace Existing")
+        alert.addButton(withTitle: "Skip")
         switch alert.runModal() {
-        case .alertSecondButtonReturn:
+        case .alertFirstButtonReturn:
             return .keepBoth
-        case .alertThirdButtonReturn:
+        case .alertSecondButtonReturn:
             return .replaceExisting
         default:
             return .skip
@@ -42,13 +42,13 @@ struct MacImportConflictResolver: ImportConflictResolving {
         alert.alertStyle = .informational
         alert.messageText = "Duplicate Screenshots Found"
         alert.informativeText = "\(count) imported file\(count == 1 ? "" : "s") already exist in Screenshot Inbox."
-        alert.addButton(withTitle: "Skip All")
         alert.addButton(withTitle: "Keep Both for All")
-        alert.addButton(withTitle: "Replace All")
+        alert.addButton(withTitle: "Replace Existing for All")
+        alert.addButton(withTitle: "Skip All")
         switch alert.runModal() {
-        case .alertSecondButtonReturn:
+        case .alertFirstButtonReturn:
             return .keepBoth
-        case .alertThirdButtonReturn:
+        case .alertSecondButtonReturn:
             return .replaceExisting
         default:
             return .skip

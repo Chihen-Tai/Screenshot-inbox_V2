@@ -51,11 +51,13 @@ Original source files are not modified by default.
 
 Import copies files into the managed library. The original path is kept as a reference to where the file came from. Normal rename, trash, restore, and delete workflows operate on Screenshot Inbox records and managed library copies, not the original Desktop, Downloads, or other source files.
 
-Original source rename/delete behavior is intentionally disabled unless a future explicit setting and permission model is added.
+Source Folder Sync is optional and off by default. When enabled in Settings, Screenshot Inbox can rename original source files, move original source files to macOS Trash when items move to app Trash, and move original source files to macOS Trash during managed-copy permanent deletion confirmation. Original source files are moved to macOS Trash, not permanently deleted, in this phase.
+
+When "Copy newly added screenshots to a default source folder" is enabled, pasted or generated imports without a stable original source path can also be copied to the selected default folder. Screenshot Inbox avoids overwriting existing files by choosing a unique filename.
 
 ## Trash and Deletion
 
-App Trash affects screenshots in the managed library. Permanent deletion removes managed-library records and managed files, not unrelated source files outside the managed library.
+App Trash affects screenshots in the managed library. Permanent deletion removes managed-library records and managed files. Original source files outside the managed library are affected only when the relevant Source Folder Sync setting is enabled, and source-file removal uses macOS Trash rather than direct permanent deletion.
 
 ## Folder Access and Sandbox Status
 

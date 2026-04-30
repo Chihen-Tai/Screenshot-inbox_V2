@@ -73,6 +73,7 @@ extension Migration {
             filename     TEXT NOT NULL,
             library_path TEXT NOT NULL,
             file_hash    TEXT NOT NULL,
+            original_path TEXT,
             width        INTEGER NOT NULL,
             height       INTEGER NOT NULL,
             file_size    INTEGER NOT NULL,
@@ -264,8 +265,24 @@ extension Migration {
         try db.exec("CREATE INDEX IF NOT EXISTS idx_organization_rule_runs_rule_uuid ON organization_rule_runs(rule_uuid);")
     }
 
+    static let originalPathSchema = Migration(version: 9) { db in
+        if try !screenshotTableHasColumn("original_path", database: db) {
+            try db.exec("ALTER TABLE screenshots ADD COLUMN original_path TEXT;")
+        }
+    }
+
     private static func collectionTableHasColumn(_ column: String, database: Database) throws -> Bool {
         let stmt = try database.prepare("PRAGMA table_info(collections);")
+        while try stmt.step() {
+            if stmt.columnString(1) == column {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func screenshotTableHasColumn(_ column: String, database: Database) throws -> Bool {
+        let stmt = try database.prepare("PRAGMA table_info(screenshots);")
         while try stmt.step() {
             if stmt.columnString(1) == column {
                 return true

@@ -237,9 +237,6 @@ final class ScreenshotActionRouter {
         log("moveToTrash", shots)
         guard !shots.isEmpty else { return }
         appState.trash(ids: Set(shots.map(\.id)))
-        let n = shots.count
-        let suffix = n == 1 ? "" : "s"
-        appState.showToast("Moved \(n) screenshot\(suffix) to Trash", kind: .success)
     }
 
     func restoreFromTrash(_ shots: [Screenshot]) {

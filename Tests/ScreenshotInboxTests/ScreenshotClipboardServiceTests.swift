@@ -32,6 +32,66 @@ struct ScreenshotClipboardServiceTests {
             ) as? [URL] == [managed]
         )
         #expect(pasteboard.string(forType: DragPasteboardTypes.screenshotIDs) == screenshot.uuidString)
+        #expect(pasteboard.string(forType: DragPasteboardTypes.clipboardOperation) == "copy")
+    }
+
+    @Test
+    func cutScreenshotsWritesInternalMoveContextAndExternalURLs() throws {
+        let root = try makeRoot()
+        let managed = root.appendingPathComponent("Originals/managed.png")
+        try FileManager.default.createDirectory(
+            at: managed.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data([1, 2, 3]).write(to: managed)
+        let screenshot = makeScreenshot(libraryPath: "Originals/managed.png")
+        let source = ScreenshotClipboardSourceContext(
+            sidebarSelection: .collection("source-collection"),
+            collectionUUID: "source-collection"
+        )
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("ScreenshotInboxCutTests-\(UUID().uuidString)"))
+        let service = ScreenshotClipboardService(
+            screenshotsProvider: { ids in
+                ids.contains(screenshot.uuidString) ? [screenshot] : []
+            },
+            libraryRootURL: root
+        )
+
+        let count = try service.cutScreenshots(ids: [screenshot.uuidString], source: source, to: pasteboard)
+
+        #expect(count == 1)
+        #expect(service.internalScreenshotIDs(from: pasteboard) == [screenshot.id])
+        #expect(pasteboard.string(forType: DragPasteboardTypes.clipboardOperation) == "cut")
+        #expect(pasteboard.string(forType: DragPasteboardTypes.sourceCollectionID) == "source-collection")
+        #expect(
+            pasteboard.readObjects(
+                forClasses: [NSURL.self],
+                options: [.urlReadingFileURLsOnly: true]
+            ) as? [URL] == [managed]
+        )
+    }
+
+    @Test
+    func internalScreenshotIDsReadNewlineAndJSONPayloads() throws {
+        let root = try makeRoot()
+        let first = UUID()
+        let second = UUID()
+        let service = ScreenshotClipboardService(screenshotsProvider: { _ in [] }, libraryRootURL: root)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("ScreenshotInboxInternalIDs-\(UUID().uuidString)"))
+
+        pasteboard.clearContents()
+        pasteboard.setString(
+            "\(first.uuidString.lowercased())\n\(second.uuidString)\n\(first.uuidString)",
+            forType: DragPasteboardTypes.screenshotIDs
+        )
+
+        #expect(service.internalScreenshotIDs(from: pasteboard) == [first, second])
+
+        pasteboard.clearContents()
+        let json = try JSONEncoder().encode([first.uuidString, second.uuidString])
+        pasteboard.setString(String(decoding: json, as: UTF8.self), forType: DragPasteboardTypes.screenshotIDs)
+
+        #expect(service.internalScreenshotIDs(from: pasteboard) == [first, second])
     }
 
     @Test

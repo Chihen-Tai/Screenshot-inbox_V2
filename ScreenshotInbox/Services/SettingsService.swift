@@ -21,11 +21,13 @@ final class SettingsService {
             return AppPreferences(
                 autoImportEnabled: bool(Keys.autoImportEnabled, fallback.autoImportEnabled),
                 defaultWatchedFoldersInitialized: bool(Keys.defaultWatchedFoldersInitialized, fallback.defaultWatchedFoldersInitialized),
-                renameOriginalSourceFiles: bool(Keys.renameOriginalSourceFiles, fallback.renameOriginalSourceFiles),
-                trashOriginalSourceFiles: bool(Keys.trashOriginalSourceFiles, fallback.trashOriginalSourceFiles),
-                deleteOriginalSourceFiles: bool(Keys.deleteOriginalSourceFiles, fallback.deleteOriginalSourceFiles),
-                copyNewScreenshotsToDefaultFolder: bool(Keys.copyNewScreenshotsToDefaultFolder, fallback.copyNewScreenshotsToDefaultFolder),
-                defaultCopyFolderPath: defaults.string(forKey: Keys.defaultCopyFolderPath) ?? fallback.defaultCopyFolderPath,
+                syncRenameOriginalSourceFiles: bool(Keys.syncRenameOriginalSourceFiles, fallback.syncRenameOriginalSourceFiles),
+                syncMoveOriginalToTrashOnAppTrash: bool(Keys.syncMoveOriginalToTrashOnAppTrash, fallback.syncMoveOriginalToTrashOnAppTrash),
+                syncMoveOriginalToTrashOnPermanentDelete: bool(Keys.syncMoveOriginalToTrashOnPermanentDelete, fallback.syncMoveOriginalToTrashOnPermanentDelete),
+                syncTrashInboxItemWhenOriginalDeleted: bool(Keys.syncTrashInboxItemWhenOriginalDeleted, fallback.syncTrashInboxItemWhenOriginalDeleted),
+                syncRenameInboxItemWhenOriginalRenamed: bool(Keys.syncRenameInboxItemWhenOriginalRenamed, fallback.syncRenameInboxItemWhenOriginalRenamed),
+                copyNewImportsToDefaultSourceFolder: bool(Keys.copyNewImportsToDefaultSourceFolder, fallback.copyNewImportsToDefaultSourceFolder),
+                defaultSourceFolderPath: defaults.string(forKey: Keys.defaultSourceFolderPath) ?? fallback.defaultSourceFolderPath,
                 inspectorVisibleByDefault: bool(Keys.inspectorVisibleByDefault, fallback.inspectorVisibleByDefault),
                 sidebarVisibleByDefault: bool(Keys.sidebarVisibleByDefault, fallback.sidebarVisibleByDefault),
                 sidebarPanelWidth: double(Keys.sidebarPanelWidth, fallback.sidebarPanelWidth),
@@ -52,11 +54,13 @@ final class SettingsService {
     func save(_ preferences: AppPreferences) {
         defaults.set(preferences.autoImportEnabled, forKey: Keys.autoImportEnabled)
         defaults.set(preferences.defaultWatchedFoldersInitialized, forKey: Keys.defaultWatchedFoldersInitialized)
-        defaults.set(preferences.renameOriginalSourceFiles, forKey: Keys.renameOriginalSourceFiles)
-        defaults.set(preferences.trashOriginalSourceFiles, forKey: Keys.trashOriginalSourceFiles)
-        defaults.set(preferences.deleteOriginalSourceFiles, forKey: Keys.deleteOriginalSourceFiles)
-        defaults.set(preferences.copyNewScreenshotsToDefaultFolder, forKey: Keys.copyNewScreenshotsToDefaultFolder)
-        defaults.set(preferences.defaultCopyFolderPath, forKey: Keys.defaultCopyFolderPath)
+        defaults.set(preferences.syncRenameOriginalSourceFiles, forKey: Keys.syncRenameOriginalSourceFiles)
+        defaults.set(preferences.syncMoveOriginalToTrashOnAppTrash, forKey: Keys.syncMoveOriginalToTrashOnAppTrash)
+        defaults.set(preferences.syncMoveOriginalToTrashOnPermanentDelete, forKey: Keys.syncMoveOriginalToTrashOnPermanentDelete)
+        defaults.set(preferences.syncTrashInboxItemWhenOriginalDeleted, forKey: Keys.syncTrashInboxItemWhenOriginalDeleted)
+        defaults.set(preferences.syncRenameInboxItemWhenOriginalRenamed, forKey: Keys.syncRenameInboxItemWhenOriginalRenamed)
+        defaults.set(preferences.copyNewImportsToDefaultSourceFolder, forKey: Keys.copyNewImportsToDefaultSourceFolder)
+        defaults.set(preferences.defaultSourceFolderPath, forKey: Keys.defaultSourceFolderPath)
         defaults.set(preferences.inspectorVisibleByDefault, forKey: Keys.inspectorVisibleByDefault)
         defaults.set(preferences.sidebarVisibleByDefault, forKey: Keys.sidebarVisibleByDefault)
         defaults.set(preferences.sidebarPanelWidth, forKey: Keys.sidebarPanelWidth)
@@ -108,11 +112,13 @@ final class SettingsService {
     enum Keys {
         static let autoImportEnabled = "ScreenshotInbox.autoImport.enabled"
         static let defaultWatchedFoldersInitialized = "ScreenshotInbox.defaultWatchedFoldersInitialized"
-        static let renameOriginalSourceFiles = "ScreenshotInbox.renameOriginalSourceFiles"
-        static let trashOriginalSourceFiles = "ScreenshotInbox.trashOriginalSourceFiles"
-        static let deleteOriginalSourceFiles = "ScreenshotInbox.deleteOriginalSourceFiles"
-        static let copyNewScreenshotsToDefaultFolder = "ScreenshotInbox.copyNewScreenshotsToDefaultFolder"
-        static let defaultCopyFolderPath = "ScreenshotInbox.defaultCopyFolderPath"
+        static let syncRenameOriginalSourceFiles = "ScreenshotInbox.syncRenameOriginalSourceFiles"
+        static let syncMoveOriginalToTrashOnAppTrash = "ScreenshotInbox.syncMoveOriginalToTrashOnAppTrash"
+        static let syncMoveOriginalToTrashOnPermanentDelete = "ScreenshotInbox.syncMoveOriginalToTrashOnPermanentDelete"
+        static let syncTrashInboxItemWhenOriginalDeleted = "ScreenshotInbox.syncTrashInboxItemWhenOriginalDeleted"
+        static let syncRenameInboxItemWhenOriginalRenamed = "ScreenshotInbox.syncRenameInboxItemWhenOriginalRenamed"
+        static let copyNewImportsToDefaultSourceFolder = "ScreenshotInbox.copyNewImportsToDefaultSourceFolder"
+        static let defaultSourceFolderPath = "ScreenshotInbox.defaultSourceFolderPath"
         static let inspectorVisibleByDefault = "ScreenshotInbox.inspectorVisibleByDefault"
         static let sidebarVisibleByDefault = "ScreenshotInbox.sidebarVisibleByDefault"
         static let sidebarPanelWidth = "ScreenshotInbox.layout.sidebarPanelWidth"

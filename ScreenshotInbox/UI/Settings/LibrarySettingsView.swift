@@ -27,27 +27,62 @@ struct LibrarySettingsView: View {
                 }
 
                 SettingsSection(title: "File Behavior / Source Folder Sync") {
-                    SettingsNote(text: "By default, Screenshot Inbox works in Library Mode. Imported files are copied into a managed library. Renaming, trashing, or deleting items inside Screenshot Inbox affects the managed copy only. Original Desktop, Downloads, or source folder files are left unchanged unless Source Folder Sync is enabled.")
+                    SettingsNote(text: "By default, Screenshot Inbox works in Library Mode. Imported files are copied into a managed library. When Source Folder Sync is enabled, selected actions can also update the original Desktop, Downloads, or watched-folder files.")
 
                     VStack(alignment: .leading, spacing: 8) {
-                        SourceSyncStatusRow(
+                        SourceSyncToggleRow(
                             title: "Rename original source files when renaming screenshots",
-                            status: "Coming later",
-                            detail: "Currently OFF. Renames apply only to the managed library copy."
+                            detail: "When enabled, renaming in Screenshot Inbox will also rename the original file if it still exists.",
+                            isOn: $appState.preferences.syncRenameOriginalSourceFiles
                         )
-                        SourceSyncStatusRow(
-                            title: "Move original source files to macOS Trash",
-                            status: "Coming later",
-                            detail: "Currently OFF. Trash only affects Screenshot Inbox managed files."
+                        SourceSyncToggleRow(
+                            title: "Move original source files to macOS Trash when moving screenshots to Screenshot Inbox Trash",
+                            detail: "When enabled, app Trash also moves the original source file to macOS Trash. It is not permanently deleted.",
+                            isOn: $appState.preferences.syncMoveOriginalToTrashOnAppTrash
                         )
-                        SourceSyncStatusRow(
-                            title: "Delete original source files permanently",
-                            status: "Not available",
-                            detail: "Permanent source deletion is intentionally unavailable in this alpha."
+                        SourceSyncToggleRow(
+                            title: "Move original source files to macOS Trash when permanently deleting screenshots",
+                            detail: "When enabled, permanent deletion of managed copies also asks to move original source files to macOS Trash.",
+                            isOn: $appState.preferences.syncMoveOriginalToTrashOnPermanentDelete
                         )
+                        SourceSyncToggleRow(
+                            title: "Move Screenshot Inbox items to Trash when original source files are deleted",
+                            detail: "When enabled, if the original Desktop, Downloads, or watched-folder file is deleted outside Screenshot Inbox, the matching item will be moved to Screenshot Inbox Trash.",
+                            isOn: $appState.preferences.syncTrashInboxItemWhenOriginalDeleted
+                        )
+                        SourceSyncToggleRow(
+                            title: "Update Screenshot Inbox item name when original source file is renamed",
+                            detail: "When enabled, Screenshot Inbox reconciles same-folder source renames by file hash and updates the linked source path and item name.",
+                            isOn: $appState.preferences.syncRenameInboxItemWhenOriginalRenamed
+                        )
+                        HStack {
+                            Button("Check Source Sync Now") {
+                                appState.checkSourceFileStatus()
+                            }
+                            .disabled(!appState.preferences.syncTrashInboxItemWhenOriginalDeleted &&
+                                      !appState.preferences.syncRenameInboxItemWhenOriginalRenamed)
+                            Spacer()
+                        }
+                        SourceSyncToggleRow(
+                            title: "Copy newly added screenshots to a default source folder",
+                            detail: "When enabled, pasted or generated imports without a stable source file are copied to the selected folder.",
+                            isOn: $appState.preferences.copyNewImportsToDefaultSourceFolder
+                        )
+                        HStack {
+                            Text(appState.preferences.defaultSourceFolderPath)
+                                .font(.system(size: 11.5, design: .monospaced))
+                                .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button("Choose Folder...") {
+                                appState.chooseDefaultSourceFolder()
+                            }
+                        }
+                        .disabled(!appState.preferences.copyNewImportsToDefaultSourceFolder)
                     }
 
-                    SettingsNote(text: "Source Folder Sync remains off until original-file permissions, conflict handling, and explicit confirmations are implemented. Screenshot Inbox will not silently modify Desktop, Downloads, or watched-folder originals.")
+                    SettingsNote(text: "Screenshot Inbox never permanently deletes original source files in this phase. Source-file removal uses macOS Trash.")
                 }
 
                 SettingsSection(title: "Library Maintenance") {
@@ -178,20 +213,16 @@ private struct LibraryHealthSummary: View {
     }
 }
 
-private struct SourceSyncStatusRow: View {
+private struct SourceSyncToggleRow: View {
     let title: String
-    let status: String
     let detail: String
+    @Binding var isOn: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title)
+                Toggle(title, isOn: $isOn)
                     .font(.system(size: 12, weight: .medium))
-                Spacer()
-                Text(status)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.SemanticColor.secondaryLabel)
             }
             Text(detail)
                 .font(.system(size: 11.5))
