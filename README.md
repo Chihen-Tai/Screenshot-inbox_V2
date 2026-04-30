@@ -8,17 +8,24 @@ Screenshot Inbox helps keep screenshots out of scattered folders by importing th
 
 ## Screenshots
 
-Place app screenshots here.
 
-[Image placeholder: Main window]
+Main window
 
-[Image placeholder: OCR and search]
+- Add screenshot: docs/images/main.png
 
-[Image placeholder: PDF export]
+OCR and search
 
-[Image placeholder: Settings]
+- Add screenshot: docs/images/qrocr.png
+- Add screenshot: docs/images/search.png
 
-Future screenshots can be placed in `docs/images/`.
+PDF export
+
+- Add screenshot: docs/images/pdf.png
+
+Settings
+
+- Add screenshot: docs/images/setting.png
+
 
 <!-- Add screenshot: docs/images/main-window.png -->
 <!-- Add screenshot: docs/images/ocr-and-search.png -->
@@ -63,8 +70,8 @@ For now:
 ## Build from Source
 
 ```bash
-git clone https://github.com/<your-username>/ScreenshotInbox.git
-cd ScreenshotInbox
+git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
+cd Screenshot-inbox_V2
 swift build
 swift run ScreenshotInbox
 ```
