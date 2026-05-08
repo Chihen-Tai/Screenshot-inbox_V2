@@ -3,14 +3,25 @@ import AppKit
 
 @main
 struct ScreenshotInboxApp: App {
-    @StateObject private var appState = AppState()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var appState: AppState
 
     // SPM executable targets launch without a proper app bundle, so the
     // activation policy defaults to something that suppresses the menu bar
     // and starves SwiftUI's `keyboardShortcut` of a place to register. Force
     // `.regular` + `activate(...)` so Cmd-A reaches the app at all.
     init() {
+        let singleInstanceDecision = ScreenshotInboxSingleInstanceGuard.enforce()
+        _appState = StateObject(wrappedValue: AppState(
+            startRuntimeServices: singleInstanceDecision.result == .keepCurrent
+        ))
+
+        guard singleInstanceDecision.result == .keepCurrent else {
+            return
+        }
+
         NSApplication.shared.setActivationPolicy(.regular)
+        ScreenshotInboxSingleInstanceGuard.startDuplicateLaunchMonitor()
         if let appIcon = Self.appIconImage() {
             NSApplication.shared.applicationIconImage = appIcon
         }
@@ -19,25 +30,13 @@ struct ScreenshotInboxApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Screenshot Inbox") {
-            MainWindowView()
-                .environmentObject(appState)
-                .preferredColorScheme(colorScheme)
-                .frame(
-                    minWidth: Theme.Layout.minWindowWidth,
-                    minHeight: Theme.Layout.minWindowHeight
-                )
-        }
-        .windowStyle(.titleBar)
-        .windowToolbarStyle(.unified)
-        .commands {
-            AppCommands(appState: appState)
-        }
-
         Settings {
             SettingsView()
                 .environmentObject(appState)
                 .preferredColorScheme(colorScheme)
+        }
+        .commands {
+            AppCommands(appState: appState)
         }
     }
 

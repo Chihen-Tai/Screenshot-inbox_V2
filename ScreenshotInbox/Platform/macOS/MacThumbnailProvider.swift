@@ -36,6 +36,11 @@ final class MacThumbnailProvider {
         return library.libraryRootURL.appendingPathComponent(path)
     }
 
+    func originalExists(for screenshot: Screenshot) -> Bool {
+        guard let url = originalURL(for: screenshot) else { return false }
+        return fileManager.fileExists(atPath: url.path)
+    }
+
     func loadThumbnail(for screenshot: Screenshot, tier: Tier) -> NSImage? {
         guard let url = thumbnailURL(for: screenshot, tier: tier) else {
             #if DEBUG

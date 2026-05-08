@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.4.0-alpha
+
+- Stabilized Settings, Source Folder Sync, clipboard, sidebar, layout, and core library workflows for the macOS release freeze.
+- Added architecture, SQLite schema, managed library format, and platform-boundary documentation for future portability work.
+- Added a read-only Windows prototype to validate Screenshot Inbox library compatibility outside macOS.
+- Verified local release packaging with ad-hoc signing; notarization still requires a Developer ID certificate and Apple notarization credentials.
+
 ## 0.3.0-alpha
 
 - Release packaging cleanup

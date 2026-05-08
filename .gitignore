@@ -8,6 +8,12 @@
 .swiftpm/
 Package.resolved
 
+# .NET / Windows prototype
+bin/
+obj/
+.vs/
+TestResults/
+
 # Xcode local state
 DerivedData/
 *.xcuserstate

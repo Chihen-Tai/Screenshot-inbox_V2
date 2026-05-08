@@ -8,7 +8,7 @@ enum MacFileActionError: Error {
 }
 
 /// macOS-only file actions for managed originals.
-final class MacFileActionService {
+final class MacFileActionService: FileOpening, FileTrashManaging {
     private let workspace: NSWorkspace
     private let fileManager: FileManager
 
@@ -26,11 +26,19 @@ final class MacFileActionService {
         }
     }
 
+    func openFile(path: String) throws {
+        try open(URL(fileURLWithPath: path))
+    }
+
     func revealInFinder(_ url: URL) throws {
         guard fileManager.fileExists(atPath: url.path) else {
             throw MacFileActionError.missingFile(url)
         }
         workspace.activateFileViewerSelecting([url])
+    }
+
+    func revealInFinder(path: String) throws {
+        try revealInFinder(URL(fileURLWithPath: path))
     }
 
     @MainActor
@@ -58,5 +66,19 @@ final class MacFileActionService {
                 #endif
             }
         }
+    }
+
+    @MainActor
+    func openWith(path: String) throws {
+        try openWithPicker(URL(fileURLWithPath: path))
+    }
+
+    func moveToSystemTrash(path: String) throws {
+        let url = URL(fileURLWithPath: path)
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw MacFileActionError.missingFile(url)
+        }
+        var resultingURL: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &resultingURL)
     }
 }

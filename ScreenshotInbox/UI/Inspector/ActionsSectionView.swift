@@ -80,6 +80,11 @@ struct ActionsSectionView: View {
                         appState.router.copyImage([screenshot])
                     }
                     rowDivider
+                    ActionRow(title: "Copy File",
+                              systemImage: "doc.on.doc") {
+                        appState.router.copyFiles([screenshot])
+                    }
+                    rowDivider
                     ActionRow(title: "Move to Trash",
                               systemImage: "trash",
                               isDestructive: true) {

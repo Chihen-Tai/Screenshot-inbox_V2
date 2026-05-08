@@ -4,7 +4,7 @@ enum AppReleaseInfo {
     static let name = "Screenshot Inbox"
     static let executableName = "ScreenshotInbox"
     static let bundleIdentifier = "com.chihentai.screenshotinbox"
-    static let version = "0.4.0-alpha-dev"
+    static let version = "0.4.0-alpha"
     static let build = "4"
     static let copyright = "Copyright © 2026 Chihen Tai"
     static let license = "MIT"

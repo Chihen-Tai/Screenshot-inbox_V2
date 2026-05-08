@@ -6,7 +6,7 @@ Screenshot Inbox is a native macOS app for collecting, organizing, searching, an
 
 Screenshot Inbox helps keep screenshots out of scattered folders by importing them into a local managed library. From there, you can organize screenshots with tags and collections, search by filename or extracted text, detect QR codes and links, export selected items, and safely clean up with app-level Trash and restore.
 
-## Installation(RECOMMAND)
+## Installation
 
 ```bash
 git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
@@ -49,6 +49,7 @@ The project is a Swift Package Manager executable target, not an Xcode project. 
 - Local screenshot library
 - Manual image import
 - Auto import from watched folders
+- Floating Preview Panel with menu-bar badge for real-time new-screenshot notifications
 - Sidebar collections
 - Tags
 - Favorites
@@ -56,8 +57,9 @@ The project is a Swift Package Manager executable target, not an Xcode project. 
 - OCR text extraction
 - QR code and link detection
 - Search across filenames, OCR text, tags, collections, and detected codes
-- Export selected screenshots as PDF
-- Export and share original images
+- Export selected screenshots as PDF (Cmd+Shift+E)
+- Export original images (Cmd+E)
+- Reveal in Finder after export
 - Duplicate and cleanup tools
 - Library maintenance and repair tools
 
@@ -70,7 +72,7 @@ The project is a Swift Package Manager executable target, not an Xcode project. 
 
 ## Release Builds
 
-The current development pre-release version is `0.4.0-alpha-dev` with build `4`.
+The current pre-release version is `0.4.0-alpha` with build `4`.
 
 Create a local release app bundle:
 
@@ -89,12 +91,13 @@ Release packaging, signing, notarization, and manual QA steps are documented in 
 ## Usage
 
 1. Import screenshots manually, or enable watched folders for auto import.
-2. Organize screenshots with collections, tags, and favorites.
-3. Use OCR and search to find screenshots by text, filenames, tags, collections, or detected codes.
-4. Use QR detection to open or copy links found in screenshots.
-5. Select screenshots and export them as a PDF or export/share originals.
-6. Use Trash and Restore for safe cleanup before permanent deletion.
-7. Use library maintenance tools if thumbnails, OCR records, or library files need repair.
+2. The Floating Preview Panel appears automatically when new screenshots arrive and shows a quick-action tray. The menu-bar badge shows the unreviewed count.
+3. Organize screenshots with collections, tags, and favorites.
+4. Use OCR and search to find screenshots by text, filenames, tags, collections, or detected codes.
+5. Use QR detection to open or copy links found in screenshots.
+6. Select screenshots and press Cmd+Shift+E to combine into a PDF, or Cmd+E to export originals. Both open a save panel and reveal the exported file in Finder.
+7. Use Trash and Restore for safe cleanup before permanent deletion.
+8. Use library maintenance tools if thumbnails, OCR records, or library files need repair.
 
 ## Project Structure
 

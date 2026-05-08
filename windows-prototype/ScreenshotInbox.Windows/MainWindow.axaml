@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:ScreenshotInbox.Windows.Models"
+        x:Class="ScreenshotInbox.Windows.MainWindow"
+        Width="1120"
+        Height="720"
+        MinWidth="860"
+        MinHeight="520"
+        Title="Screenshot Inbox Windows Prototype">
+  <Grid RowDefinitions="Auto,*" Background="#F7F8FA">
+    <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D8DCE3" BorderThickness="0,0,0,1" Padding="14">
+      <Grid ColumnDefinitions="Auto,*,240">
+        <Button Content="Open Library" Click="OpenLibrary_Click" Padding="12,7" Margin="0,0,12,0" />
+        <StackPanel Grid.Column="1" Spacing="4" Margin="0,0,12,0">
+          <TextBlock Text="{Binding LibraryPath}" FontSize="13" Foreground="#1F2937" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="#6B7280" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <TextBox Grid.Column="2"
+                 PlaceholderText="Search filename or OCR"
+                 Text="{Binding SearchText, Mode=TwoWay}"
+                 VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="2*,320" Margin="14">
+      <Border Background="#FFFFFF" BorderBrush="#D8DCE3" BorderThickness="1" Margin="0,0,14,0">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto" Margin="12,10">
+            <TextBlock Text="Screenshots" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding ScreenshotCount, StringFormat='{}{0} records'}" Foreground="#6B7280" />
+          </Grid>
+          <ListBox Grid.Row="1"
+                   ItemsSource="{Binding Screenshots}"
+                   SelectedItem="{Binding SelectedScreenshot, Mode=TwoWay}"
+                   BorderThickness="0">
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="models:ScreenshotListItem">
+                <Grid ColumnDefinitions="76,*,120" Margin="8">
+                  <Border Width="64" Height="48" Background="#E5E7EB" BorderBrush="#CBD5E1" BorderThickness="1">
+                    <Image Source="{Binding ThumbnailPath}" Stretch="UniformToFill" />
+                  </Border>
+                  <StackPanel Grid.Column="1" Spacing="3" Margin="12,0,12,0">
+                    <TextBlock Text="{Binding Filename}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding SizeText}" Foreground="#6B7280" FontSize="12" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding FavoriteText}" Foreground="#B45309" FontSize="12" />
+                      <TextBlock Text="{Binding TrashText}" Foreground="#B91C1C" FontSize="12" />
+                    </StackPanel>
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" Text="{Binding ImportedText}" Foreground="#6B7280" FontSize="12" TextAlignment="Right" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#D8DCE3" BorderThickness="1" Padding="14">
+        <ScrollViewer>
+          <StackPanel Spacing="10">
+            <TextBlock Text="Metadata" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.Filename}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.Uuid}" Foreground="#6B7280" FontSize="12" TextWrapping="Wrap" />
+            <Separator />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.Format, StringFormat='Format: {0}'}" />
+            <TextBlock Text="{Binding SelectedScreenshot.SizeText, StringFormat='Dimensions: {0}'}" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.FileSize, StringFormat='File size: {0} bytes'}" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.CreatedAt, StringFormat='Created: {0:yyyy-MM-dd HH:mm}'}" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.ImportedAt, StringFormat='Imported: {0:yyyy-MM-dd HH:mm}'}" />
+            <Separator />
+            <TextBlock Text="Managed image path" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.ManagedImagePath}" TextWrapping="Wrap" Foreground="#374151" />
+            <TextBlock Text="Original source path" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding SelectedScreenshot.Record.OriginalPath}" TextWrapping="Wrap" Foreground="#374151" />
+            <Separator />
+            <TextBlock Text="Warnings" FontWeight="SemiBold" />
+            <ItemsControl ItemsSource="{Binding Warnings}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="#92400E" Margin="0,0,0,5" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

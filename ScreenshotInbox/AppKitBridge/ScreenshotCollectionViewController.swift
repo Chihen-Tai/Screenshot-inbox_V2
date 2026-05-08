@@ -274,6 +274,7 @@ final class ScreenshotCollectionViewController: NSViewController {
         print("[Drag] preview frame: x=\(Int(itemFrameInCollection.origin.x)) y=\(Int(itemFrameInCollection.origin.y)) w=\(Int(itemFrameInCollection.width)) h=\(Int(itemFrameInCollection.height))")
         #endif
         let fileURLs = managedFileURLs(for: ids)
+        print("[Drag] started with \(fileURLs.urls.count) file(s)")
         let primaryURL = managedFileURL(for: clickedID) ?? fileURLs.urls.first
         let pasteboardItem = dragPasteboardItem(ids: ids, fileURL: primaryURL)
         #if DEBUG
@@ -364,6 +365,7 @@ final class ScreenshotCollectionViewController: NSViewController {
             #endif
             guard exists else {
                 missing += 1
+                print("[MissingFile] file missing url = \(url.path)")
                 continue
             }
             urls.append(url)

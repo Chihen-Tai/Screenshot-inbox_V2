@@ -17,24 +17,6 @@ protocol LibraryManaging: AnyObject {
     func bootstrap() throws
 }
 
-/// Reads dimensions / format / capture timestamp from an image file.
-/// Implementations are platform-specific (ImageIO on macOS, WIC on Windows).
-protocol ImageMetadataReading {
-    func read(from url: URL) throws -> ImageMetadata
-}
-
-/// Writes small + large JPEG thumbnails for `uuid` derived from `sourceURL`.
-protocol ThumbnailGenerating {
-    func writeThumbnails(from sourceURL: URL, uuid: UUID) throws
-}
-
-/// Generates compact perceptual hashes for image similarity. Implementations
-/// can be platform-specific because decoding lives at the platform boundary.
-protocol ImageHashingService {
-    var algorithm: String { get }
-    func hashImage(at url: URL) throws -> ImageHashRecord
-}
-
 enum ImportConflictReason: String, Hashable {
     case exactDuplicateHash
 }

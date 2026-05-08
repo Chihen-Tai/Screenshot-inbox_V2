@@ -43,7 +43,7 @@ struct AppCommands: Commands {
 
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
-                SettingsWindowOpener.open(appState: appState)
+                AppWindowRouter.shared.openSettings()
             }
             .keyboardShortcut(",", modifiers: [.command])
         }
@@ -106,6 +106,38 @@ struct AppCommands: Commands {
                 appState.selectAllVisibleScreenshots()
             }
             .keyboardShortcut("a", modifiers: [.command])
+        }
+
+        CommandGroup(after: .pasteboard) {
+            Button("Reveal in Finder") {
+                let shots = appState.selectedScreenshots
+                guard !shots.isEmpty else { return }
+                print("[AppCommands] Reveal in Finder fired count=\(shots.count)")
+                appState.router.revealInFinder(shots)
+            }
+            .keyboardShortcut("r", modifiers: [.command])
+
+            Divider()
+
+            Button("Export Original…") {
+                let shots = appState.selectedScreenshots
+                guard !shots.isEmpty else { return }
+                print("[AppCommands] Export Original fired count=\(shots.count)")
+                appState.router.exportOriginals(shots)
+            }
+            .keyboardShortcut("e", modifiers: [.command])
+            .disabled(appState.selectedScreenshots.isEmpty)
+
+            Button(appState.selectedScreenshots.count > 1
+                   ? "Combine \(appState.selectedScreenshots.count) Screenshots into PDF…"
+                   : "Export as PDF…") {
+                let shots = appState.selectedScreenshots
+                guard !shots.isEmpty else { return }
+                print("[AppCommands] Combine into PDF fired count=\(shots.count)")
+                appState.router.mergeIntoPDF(shots)
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(appState.selectedScreenshots.isEmpty)
         }
 
         CommandGroup(after: .toolbar) {

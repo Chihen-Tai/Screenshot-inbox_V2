@@ -152,6 +152,32 @@ final class AppState: ObservableObject {
     /// SQLite is empty; this remains true only if persistence could not open.
     private(set) var isUsingMockData: Bool = true
 
+    // MARK: - Phase 0 proof-of-value inbox
+
+    private let screenshotInboxPreferencesService: ScreenshotInboxPreferencesService
+    @Published var screenshotInboxPreferences: ScreenshotInboxPreferences {
+        didSet {
+            screenshotInboxPreferencesService.preferences = screenshotInboxPreferences
+            applyScreenshotInboxPreferencesSideEffects(oldValue: oldValue)
+        }
+    }
+    let screenshotInboxStore = ScreenshotInboxStore.shared
+    @Published var phase1ScreenshotFolderURL: URL = ScreenshotWatcher.defaultScreenshotFolderURL() {
+        didSet {
+            let standardized = phase1ScreenshotFolderURL.standardizedFileURL
+            if screenshotInboxPreferences.screenshotFolderPath != standardized.path {
+                var updated = screenshotInboxPreferences
+                updated.screenshotFolderPath = standardized.path
+                screenshotInboxPreferences = updated
+            }
+            if oldValue.standardizedFileURL != standardized {
+                restartPhase1ScreenshotWatcher()
+            }
+        }
+    }
+    private var screenshotWatcher: ScreenshotWatcher?
+    private var menuBarController: MenuBarController?
+
     #if DEBUG
     @Published var showDebugControls: Bool = false
     #endif
@@ -227,14 +253,22 @@ final class AppState: ObservableObject {
 
     // MARK: - Init
 
-    init() {
+    init(startRuntimeServices: Bool = true) {
         // Build the persistence stack first so the rest of init knows whether
         // we're in real-data or mock-only mode.
         let library = MacLibraryService()
         self.library = library
         let settingsService = SettingsService()
         let loadedPreferences = settingsService.preferences
+        let screenshotInboxPreferencesService = ScreenshotInboxPreferencesService()
+        let loadedScreenshotInboxPreferences = screenshotInboxPreferencesService.preferences
         self.settingsService = settingsService
+        self.screenshotInboxPreferencesService = screenshotInboxPreferencesService
+        self.screenshotInboxPreferences = loadedScreenshotInboxPreferences
+        self.phase1ScreenshotFolderURL = URL(
+            fileURLWithPath: loadedScreenshotInboxPreferences.screenshotFolderPath,
+            isDirectory: true
+        ).standardizedFileURL
         self.preferences = loadedPreferences
         self.isAutoImportEnabled = loadedPreferences.autoImportEnabled
         self.gridThumbnailSize = loadedPreferences.gridThumbnailSize
@@ -420,6 +454,11 @@ final class AppState: ObservableObject {
             screenshots: loaded,
             imageHashes: loadedImageHashes
         )
+        self.screenshotInboxStore.registerExistingLibraryOriginalURLs(
+            loaded.compactMap { screenshot in
+                screenshot.originalPath.map { URL(fileURLWithPath: $0) }
+            }
+        )
 
         let controller = SelectionController()
         self.selection = controller
@@ -445,11 +484,251 @@ final class AppState: ObservableObject {
             controller.replace(with: first.id)
         }
         print("[AppState] init instance:", ObjectIdentifier(self), "mock=\(isUsingMockData)")
-        startAutoImport()
-        validateSourceFilesOnLaunchIfNeeded()
-        startOCRQueue()
-        startCodeDetectionQueue()
-        rebuildMissingDuplicateHashes()
+        AppWindowRouter.shared.registerOpenMainInbox { [weak self] source in
+            self?.showMainInboxWindow(from: source)
+        }
+        AppWindowRouter.shared.registerOpenSettings { [weak self] in
+            self?.openSettings()
+        }
+
+        if startRuntimeServices {
+            startAutoImport()
+            validateSourceFilesOnLaunchIfNeeded()
+            startOCRQueue()
+            startCodeDetectionQueue()
+            rebuildMissingDuplicateHashes()
+            startPhase0ScreenshotWatcher()
+            applyMenuBarPreference()
+        } else {
+            print("[Lifecycle] AppState runtime services skipped for duplicate instance")
+        }
+    }
+
+    private func startPhase0ScreenshotWatcher() {
+        guard screenshotInboxPreferences.autoCaptureEnabled else {
+            screenshotWatcher?.stop()
+            screenshotWatcher = nil
+            return
+        }
+        let watcher = ScreenshotWatcher(
+            folderURL: phase1ScreenshotFolderURL,
+            presentationDelay: screenshotInboxPreferences.floatingPreviewDelay,
+            onFolderEvent: { [weak self] in
+                // Any folder change (delete, rename, new file) triggers a
+                // source-validation pass for the phase-0 screenshot folder so
+                // inbox items whose originals were deleted are caught promptly.
+                self?.schedulePhase0FolderValidation()
+            },
+            onScreenshotDetected: { [weak self] url in
+                guard let self else { return }
+                guard self.screenshotInboxPreferences.autoCaptureEnabled else { return }
+                let outcome = self.screenshotInboxStore.importScreenshotIfNeeded(url: url, source: .screenshotWatcher)
+                guard outcome.wasInserted else { return }
+                self.importCapturedScreenshotIntoRichInbox(url)
+                self.showFloatingInbox(reason: .screenshotCaptured)
+            }
+        )
+        screenshotWatcher = watcher
+        watcher.start()
+    }
+
+    private func restartPhase1ScreenshotWatcher() {
+        screenshotWatcher?.stop()
+        screenshotWatcher = nil
+        if screenshotInboxPreferences.autoCaptureEnabled {
+            startPhase0ScreenshotWatcher()
+        }
+    }
+
+    func openScreenshotInboxWindow() {
+        AppWindowRouter.shared.openMainInbox(from: .menuBar)
+    }
+
+    func showLatestScreenshotPanel() {
+        showFloatingInbox(reason: .menuBarRequested)
+    }
+
+    func openSettings() {
+        print("[Settings] openSettings() called")
+        SettingsWindowController.shared.show(appState: self)
+    }
+
+    func showFloatingInboxSettings() {
+        openSettings()
+    }
+
+    func openMainInboxFromFloatingPreview(selecting item: ScreenshotItem? = nil) {
+        if let canonicalID = item?.canonicalScreenshotID,
+           screenshotsByID[canonicalID] != nil {
+            sidebarSelection = .inbox
+            activeFilterChip = .all
+            searchQuery = ""
+            replaceSelection(with: canonicalID, source: "floatingPreview")
+        }
+        AppWindowRouter.shared.openMainInbox(from: .floatingPreview)
+    }
+
+    private func showMainInboxWindow(from source: AppWindowOpenSource) {
+        ScreenshotInboxWindowController.shared.open(appState: self, source: source)
+    }
+
+    func dismissScreenshotInboxItem(_ item: ScreenshotItem) {
+        screenshotInboxStore.dismiss(item)
+        print("[FloatingPreview] dismissed item removed from preview: \(item.url.lastPathComponent)")
+        if FloatingInboxPanelController.shared.isVisible {
+            showFloatingInbox(reason: .menuBarRequested)
+        }
+    }
+
+    func deleteScreenshotInboxItemWithConfirmation(_ item: ScreenshotItem) {
+        screenshotInboxStore.deleteFileWithConfirmation(item)
+        if FloatingInboxPanelController.shared.isVisible {
+            showFloatingInbox(reason: .menuBarRequested)
+        }
+    }
+
+    func choosePhase1ScreenshotFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Screenshot Folder"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = phase1ScreenshotFolderURL
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        phase1ScreenshotFolderURL = url.standardizedFileURL
+    }
+
+    func useDesktopPhase1ScreenshotFolder() {
+        phase1ScreenshotFolderURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask)
+            .first?
+            .standardizedFileURL ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop", isDirectory: true)
+    }
+
+    private func showFloatingInbox(reason: FloatingPreviewShowReason) {
+        guard screenshotInboxPreferences.floatingPreviewEnabled else {
+            FloatingInboxPanelController.shared.hide()
+            return
+        }
+
+        if reason == .screenshotCaptured {
+            guard screenshotInboxPreferences.floatingPreviewAutoShowEnabled else { return }
+        }
+
+        let allNewItems = screenshotInboxStore.newItems
+        print("[FloatingPreview] count updated = \(screenshotInboxStore.newUndismissedCount)")
+        let maxItems = max(1, screenshotInboxPreferences.maxFloatingPreviewItems)
+        let items = screenshotInboxPreferences.showMultipleScreenshotsInFloatingPreview
+            ? Array(allNewItems.prefix(maxItems))
+            : Array(allNewItems.prefix(1))
+
+        if items.isEmpty {
+            if reason != .screenshotCaptured && screenshotInboxPreferences.allowEmptyFloatingPreview {
+                FloatingInboxPanelController.shared.show(
+                    items: [],
+                    extraItemCount: 0,
+                    totalNewCount: 0,
+                    reason: reason,
+                    appState: self
+                )
+            } else {
+                FloatingInboxPanelController.shared.hide()
+            }
+            return
+        }
+
+        FloatingInboxPanelController.shared.show(
+            items: items,
+            extraItemCount: max(0, allNewItems.count - items.count),
+            totalNewCount: allNewItems.count,
+            reason: reason,
+            appState: self
+        )
+    }
+
+    private func importCapturedScreenshotIntoRichInbox(_ url: URL) {
+        guard database != nil else {
+            print("[Import] rich inbox import skipped; database unavailable")
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.importService.importURLs([url])
+            self.applyImportResult(result, selectImported: false)
+
+            if let canonical = result.imported.first {
+                // New import succeeded — link the floating item to the canonical row.
+                self.screenshotInboxStore.updateCanonicalID(for: url, id: canonical.id)
+                print("[Import] capture succeeded name=\(canonical.name) id=\(canonical.id)")
+            } else if let replaced = result.replaced.first {
+                // Replaced an existing duplicate — link to the updated row.
+                self.screenshotInboxStore.updateCanonicalID(for: url, id: replaced.id)
+                print("[Import] capture replaced existing id=\(replaced.id)")
+            } else if result.duplicates > 0 {
+                // Already in the library; floating item stays visible but has no canonical link.
+                print("[Import] capture already in library (duplicate), floating item kept")
+            } else if !result.failures.isEmpty {
+                // Import failed — remove the floating item so it doesn't stay as a ghost.
+                print("[Import] capture failed, removing floating item: \(url.lastPathComponent)")
+                self.screenshotInboxStore.remove(at: url)
+                if self.screenshotInboxStore.newItems.isEmpty {
+                    FloatingInboxPanelController.shared.hide()
+                } else {
+                    self.showFloatingInbox(reason: .screenshotCaptured)
+                }
+            }
+        }
+    }
+
+    private func applyScreenshotInboxPreferencesSideEffects(oldValue: ScreenshotInboxPreferences) {
+        if oldValue.screenshotFolderPath != screenshotInboxPreferences.screenshotFolderPath {
+            let configuredURL = URL(
+                fileURLWithPath: screenshotInboxPreferences.screenshotFolderPath,
+                isDirectory: true
+            ).standardizedFileURL
+            if phase1ScreenshotFolderURL.standardizedFileURL != configuredURL {
+                phase1ScreenshotFolderURL = configuredURL
+            }
+        }
+
+        if oldValue.autoCaptureEnabled != screenshotInboxPreferences.autoCaptureEnabled ||
+            oldValue.screenshotFolderPath != screenshotInboxPreferences.screenshotFolderPath ||
+            oldValue.floatingPreviewDelay != screenshotInboxPreferences.floatingPreviewDelay {
+            restartPhase1ScreenshotWatcher()
+        }
+
+        if !screenshotInboxPreferences.floatingPreviewEnabled {
+            FloatingInboxPanelController.shared.hide()
+            print("[Settings] floatingPreviewEnabled changed to false — panel hidden")
+        } else if oldValue.floatingPreviewEnabled != screenshotInboxPreferences.floatingPreviewEnabled ||
+                    oldValue.floatingPreviewAutoShowEnabled != screenshotInboxPreferences.floatingPreviewAutoShowEnabled ||
+                    oldValue.showMultipleScreenshotsInFloatingPreview != screenshotInboxPreferences.showMultipleScreenshotsInFloatingPreview ||
+                    oldValue.maxFloatingPreviewItems != screenshotInboxPreferences.maxFloatingPreviewItems {
+            if oldValue.floatingPreviewEnabled != screenshotInboxPreferences.floatingPreviewEnabled {
+                print("[Settings] floatingPreviewEnabled changed to \(screenshotInboxPreferences.floatingPreviewEnabled)")
+            }
+            if oldValue.floatingPreviewAutoShowEnabled != screenshotInboxPreferences.floatingPreviewAutoShowEnabled {
+                print("[Settings] floatingPreviewAutoShowEnabled changed to \(screenshotInboxPreferences.floatingPreviewAutoShowEnabled)")
+            }
+            showFloatingInbox(reason: .menuBarRequested)
+        }
+
+        if oldValue.menuBarEnabled != screenshotInboxPreferences.menuBarEnabled {
+            applyMenuBarPreference()
+        } else if oldValue.menuBarBadgeEnabled != screenshotInboxPreferences.menuBarBadgeEnabled {
+            menuBarController?.refreshStatusItem()
+        }
+    }
+
+    private func applyMenuBarPreference() {
+        if screenshotInboxPreferences.menuBarEnabled {
+            if menuBarController == nil {
+                menuBarController = MenuBarController(appState: self)
+            }
+            menuBarController?.refreshStatusItem()
+        } else {
+            menuBarController?.removeStatusItem()
+            menuBarController = nil
+        }
     }
 
     private func applyPreferenceSideEffects(oldValue: AppPreferences) {
@@ -541,6 +820,8 @@ final class AppState: ObservableObject {
                 base = nonTrashed.filter { $0.tags.isEmpty }
             case .trash:
                 base = allScreenshots.filter(\.isTrashed)
+            case .settings:
+                base = []
             case .collection(let uuid):
                 let ids = collectionScreenshotIDsByUUID[uuid] ?? []
                 base = nonTrashed.filter { ids.contains($0.id) }
@@ -1728,6 +2009,24 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Schedules a source-folder validation pass scoped to the phase-0 screenshot
+    /// capture folder (Desktop or user-configured location). Called on every kqueue
+    /// event from `ScreenshotWatcher` so deletions/renames in that folder are
+    /// reflected in the inbox without waiting for the next app launch.
+    private func schedulePhase0FolderValidation() {
+        guard isExternalSourceSyncEnabled else { return }
+        let folderURL = phase1ScreenshotFolderURL.standardizedFileURL
+        guard !isInsideLibrary(folderURL) else { return }
+        let key = "phase0:\(folderURL.path)"
+        sourceFolderSyncValidationTasks[key]?.cancel()
+        sourceFolderSyncValidationTasks[key] = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.validateMissingOriginalSources(in: [folderURL], showNoChanges: false)
+            self?.sourceFolderSyncValidationTasks.removeValue(forKey: key)
+        }
+    }
+
     private func validateMissingOriginalSources(in sourceFolders: [URL], showNoChanges: Bool) {
         guard isExternalSourceSyncEnabled else { return }
         #if DEBUG
@@ -1852,6 +2151,12 @@ final class AppState: ObservableObject {
 
     private func handleAutoImportResult(_ result: AutoImportResult) {
         applyImportResult(result.importResult, selectImported: false)
+        linkOrRemoveFloatingItem(for: result.importResult, sourceURL: result.sourceURL)
+        if result.inboxOutcome.wasInserted {
+            showFloatingInbox(reason: .screenshotCaptured)
+        } else if result.inboxOutcome.ignoredReason == .duplicate {
+            print("[AutoImport] duplicate result did not reopen floating preview")
+        }
         refreshImportSources(reloadWatchers: false)
         #if DEBUG
         print("[AutoImport] refresh complete")
@@ -1945,6 +2250,8 @@ final class AppState: ObservableObject {
         #if DEBUG
         print("[Selection] source=\(source) selectedCount=\(selection.count)")
         #endif
+        print("[Selection] selected count = \(selection.count)")
+        print("[Selection] primary selected = \(primarySelection?.name ?? "none")")
         print("[SelectionDebug] AppState selectedIDs count = \(selection.selectedIDs.count)")
         objectWillChange.send()
     }
@@ -2029,12 +2336,29 @@ final class AppState: ObservableObject {
         shortcuts.onPreview = { [weak self] in
             guard let self else { return }
             print("[Shortcut→AppState] onPreview")
-            if self.previewedScreenshotID != nil {
-                self.closePreview()
-                return
-            }
             let shots = self.selectedScreenshots
             self.router.quickLook(shots)
+        }
+        shortcuts.onCopy = { [weak self] in
+            guard let self else { return }
+            print("[Shortcut→AppState] onCopy")
+            let shots = self.selectedScreenshots
+            guard !shots.isEmpty else { return }
+            self.router.copyForCommand(shots)
+        }
+        shortcuts.onReveal = { [weak self] in
+            guard let self else { return }
+            print("[Shortcut→AppState] onReveal")
+            let shots = self.selectedScreenshots
+            guard !shots.isEmpty else { return }
+            self.router.revealInFinder(shots)
+        }
+        shortcuts.onOpen = { [weak self] in
+            guard let self else { return }
+            print("[Shortcut→AppState] onOpen")
+            let shots = self.selectedScreenshots
+            guard !shots.isEmpty else { return }
+            self.router.open(shots)
         }
         shortcuts.onPreviewPrevious = { [weak self] in
             guard let self, self.previewedScreenshotID != nil else { return false }
@@ -2086,6 +2410,7 @@ final class AppState: ObservableObject {
         refreshOrganizationState(pruneSelection: false)
         refreshDuplicateGroups()
         pruneSelectionToVisible()
+        screenshotInboxStore.dismissCanonicalItems(ids: Set(targets.map(\.id)))
         print("[AppState] refresh counts inbox=\(inboxCount) favorites=\(favoriteCount) trash=\(trashCount)")
         if preferences.syncMoveOriginalToTrashOnAppTrash {
             let result = moveOriginalSourcesToMacTrash(targets)
@@ -2397,19 +2722,30 @@ final class AppState: ObservableObject {
     /// Falls back gracefully if the persistence stack failed to bootstrap —
     /// the user just sees an error toast.
     func importURLs(_ urls: [URL]) async {
-        await importURLs(urls, unsupportedCount: 0, selectImported: false)
+        await importURLs(
+            urls,
+            unsupportedCount: 0,
+            selectImported: false,
+            inboxSource: .manualImport
+        )
     }
 
     func importDroppedFileURLs(_ urls: [URL], unsupportedCount: Int) async {
         let supported = urls.filter(DragDropController.isSupportedImageURL)
         let ignored = unsupportedCount + urls.count - supported.count
-        await importURLs(supported, unsupportedCount: ignored, selectImported: true)
+        await importURLs(
+            supported,
+            unsupportedCount: ignored,
+            selectImported: true,
+            inboxSource: .dragDrop
+        )
     }
 
     private func importURLs(
         _ urls: [URL],
         unsupportedCount: Int,
-        selectImported: Bool
+        selectImported: Bool,
+        inboxSource: ScreenshotInboxStore.ImportSource
     ) async {
         guard !urls.isEmpty else {
             if unsupportedCount > 0 {
@@ -2422,9 +2758,22 @@ final class AppState: ObservableObject {
             return
         }
         showToast("Importing \(urls.count)…", kind: .info)
-        let result = await importService.importURLs(urls, conflictResolver: MacImportConflictResolver())
+        let acceptedURLs = urls.compactMap { url -> URL? in
+            let outcome = screenshotInboxStore.importScreenshotIfNeeded(url: url, source: inboxSource)
+            return outcome.wasInserted ? outcome.item?.url : nil
+        }
+        guard !acceptedURLs.isEmpty else {
+            showToast("No new screenshots imported", kind: .info)
+            return
+        }
+
+        let result = await importService.importURLs(acceptedURLs, conflictResolver: MacImportConflictResolver())
 
         applyImportResult(result, selectImported: selectImported)
+        linkOrRemoveFloatingItem(for: result, sourceURLs: acceptedURLs)
+        if FloatingInboxPanelController.shared.isVisible {
+            showFloatingInbox(reason: .menuBarRequested)
+        }
 
         if let notice = takeSourceSyncNotice() {
             showToast(notice, kind: sourceSyncToastKind(for: notice))
@@ -2450,6 +2799,41 @@ final class AppState: ObservableObject {
             ), kind: .info)
         } else if !result.failures.isEmpty {
             showToast("Import failed for \(result.failures.count) file\(result.failures.count == 1 ? "" : "s")", kind: .info)
+        }
+    }
+
+    private func linkOrRemoveFloatingItem(for result: ImportResult, sourceURL: URL) {
+        linkOrRemoveFloatingItem(for: result, sourceURLs: [sourceURL])
+    }
+
+    private func linkOrRemoveFloatingItem(for result: ImportResult, sourceURLs: [URL]) {
+        let importedOrReplaced = result.imported + result.replaced
+        let linkedSourcePaths = Set(importedOrReplaced.compactMap(\.originalPath).map {
+            URL(fileURLWithPath: $0).standardizedFileURL.path
+        })
+        for screenshot in importedOrReplaced {
+            guard let originalPath = screenshot.originalPath else { continue }
+            screenshotInboxStore.updateCanonicalID(for: URL(fileURLWithPath: originalPath), id: screenshot.id)
+        }
+
+        for conflict in result.conflicts {
+            let conflictURL = URL(fileURLWithPath: conflict.incomingPath).standardizedFileURL
+            guard !linkedSourcePaths.contains(conflictURL.path) else { continue }
+            screenshotInboxStore.remove(at: conflictURL)
+        }
+
+        for (url, _) in result.failures {
+            screenshotInboxStore.remove(at: url)
+        }
+
+        if result.imported.isEmpty,
+           result.replaced.isEmpty,
+           result.duplicates == 0,
+           !sourceURLs.isEmpty,
+           !result.failures.isEmpty {
+            for url in sourceURLs {
+                screenshotInboxStore.remove(at: url)
+            }
         }
     }
 
@@ -2501,19 +2885,13 @@ final class AppState: ObservableObject {
     }
 
     func copySelectedScreenshotsToPasteboard() {
-        let ids = selectedScreenshots.map(\.uuidString)
-        guard !ids.isEmpty else {
+        let shots = selectedScreenshots
+        guard !shots.isEmpty else {
             showToast("No screenshots selected", kind: .info)
             return
         }
-        do {
-            let count = try clipboardService.copyScreenshots(ids: ids)
-            clearCutState()
-            showToast("Copied \(count) screenshot\(count == 1 ? "" : "s")", kind: .success)
-        } catch {
-            print("[Clipboard] copy failed: \(error)")
-            showToast(error.localizedDescription, kind: .info)
-        }
+        clearCutState()
+        router.copyForCommand(shots)
     }
 
     func pasteClipboardIntoInbox() {
@@ -3068,6 +3446,8 @@ final class AppState: ObservableObject {
                 message += " (\(result.skippedCount) skipped)"
             }
             showToast(message, kind: .success)
+            let outputURL = URL(fileURLWithPath: result.outputPath)
+            NSWorkspace.shared.activateFileViewerSelecting([outputURL])
         } catch PDFExportError.noRenderableImages {
             isPDFExporting = false
             showToast("No source images found", kind: .info)
@@ -3084,8 +3464,8 @@ final class AppState: ObservableObject {
 
     private func defaultPDFExportPath() -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let filename = "Screenshot Export \(formatter.string(from: Date())).pdf"
+        formatter.dateFormat = "yyyy-MM-dd HH.mm"
+        let filename = "Screenshot Inbox Export \(formatter.string(from: Date())).pdf"
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
         let folder = downloads ?? library.libraryRootURL.appendingPathComponent("Exports/PDFs", isDirectory: true)
         return uniqueExportURL(in: folder, filename: filename).path
@@ -3110,10 +3490,101 @@ final class AppState: ObservableObject {
         return url
     }
 
+    // TODO: Copy as PDF — generate temp PDF → write to NSPasteboard as kUTTypePDF data.
+    //       Deferred: NSPasteboard PDF acceptance varies by receiving app; needs QA.
+
+    /// Export a single Floating Preview inbox item as a one-page PDF.
+    /// Uses a minimal Screenshot stub with an absolute `libraryPath` so
+    /// `MacPDFExportService` can resolve the image without a library lookup.
+    func exportInboxItemAsPDF(_ item: ScreenshotItem) {
+        guard FileManager.default.fileExists(atPath: item.url.path) else {
+            showToast("File not found", kind: .info)
+            return
+        }
+        let stem = item.url.deletingPathExtension().lastPathComponent
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH.mm"
+        let defaultName = "\(stem) \(formatter.string(from: Date())).pdf"
+        guard let outputURL = chooseExportFile(title: "Export as PDF", filename: defaultName) else { return }
+        var outputPath = outputURL.path
+        if !outputPath.lowercased().hasSuffix(".pdf") { outputPath += ".pdf" }
+        let stub = Screenshot(
+            id: item.id,
+            name: item.url.lastPathComponent,
+            createdAt: item.createdAt,
+            pixelWidth: 0,
+            pixelHeight: 0,
+            byteSize: 0,
+            format: item.url.pathExtension.lowercased(),
+            tags: [],
+            ocrSnippets: [],
+            isFavorite: false,
+            isOCRComplete: false,
+            thumbnailKind: .document,
+            libraryPath: item.url.path
+        )
+        var options = PDFExportOptions.defaults(outputPath: outputPath)
+        options.order = .currentGridOrder
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await self.pdfExportService.export(screenshots: [stub], options: options)
+                await MainActor.run {
+                    self.showToast("Exported PDF", kind: .success)
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: result.outputPath)])
+                }
+            } catch {
+                await MainActor.run {
+                    print("[Export] inbox item PDF failed: \(error)")
+                    self.showToast("Could not export PDF", kind: .info)
+                }
+            }
+        }
+    }
+
     // MARK: - Export / Share
 
     func exportOriginals(_ shots: [Screenshot]) {
         guard !shots.isEmpty else { return }
+        if shots.count == 1, let shot = shots.first {
+            exportSingleOriginal(shot)
+        } else {
+            exportMultipleOriginals(shots)
+        }
+    }
+
+    private func exportSingleOriginal(_ shot: Screenshot) {
+        let sourceURLs = exportShareService.fileURLs(for: [shot])
+        guard let sourceURL = sourceURLs.first else {
+            showToast("File not found", kind: .info)
+            return
+        }
+        let defaultName = sourceURL.lastPathComponent
+        guard let destinationURL = chooseExportFile(title: "Export Original", filename: defaultName) else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let dest = destinationURL.pathExtension.isEmpty
+                    ? destinationURL.appendingPathExtension(sourceURL.pathExtension)
+                    : destinationURL
+                if FileManager.default.fileExists(atPath: dest.path) {
+                    try FileManager.default.removeItem(at: dest)
+                }
+                try FileManager.default.copyItem(at: sourceURL, to: dest)
+                await MainActor.run {
+                    self.showToast("Exported original", kind: .success)
+                    NSWorkspace.shared.activateFileViewerSelecting([dest])
+                }
+            } catch {
+                await MainActor.run {
+                    print("[Export] single original failed: \(error)")
+                    self.showToast("Could not export original", kind: .info)
+                }
+            }
+        }
+    }
+
+    private func exportMultipleOriginals(_ shots: [Screenshot]) {
         guard let folder = chooseExportFolder(message: "Choose a folder for exported originals") else { return }
         Task { [weak self] in
             guard let self else { return }
@@ -3125,6 +3596,7 @@ final class AppState: ObservableObject {
                         message += ", skipped \(result.skippedCount) missing file\(result.skippedCount == 1 ? "" : "s")"
                     }
                     self.showToast(message, kind: .success)
+                    NSWorkspace.shared.activateFileViewerSelecting([folder])
                 }
             } catch {
                 await MainActor.run {
@@ -3419,8 +3891,12 @@ final class AppState: ObservableObject {
             return
         }
         guard fileManager.fileExists(atPath: originalURL.path) else {
+            // Clear the stale path so future reveal/open doesn't silently fail
+            // against a file that no longer exists. The managed library copy was
+            // already renamed by the caller before this function was invoked.
+            shot.originalPath = nil
             sourceSyncNotice = "Renamed in Screenshot Inbox, but original source file was already missing."
-            print("[SourceSync] source rename failed: missing original path=\(originalURL.path)")
+            print("[SourceSync] source rename skipped: original missing; cleared stale originalPath for \(shot.uuidString)")
             return
         }
         let ext = originalURL.pathExtension

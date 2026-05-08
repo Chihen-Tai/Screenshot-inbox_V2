@@ -189,4 +189,15 @@ private struct TestMaintenanceThumbnailService: ThumbnailGenerating {
         try Data("small".utf8).write(to: library.smallThumbnailURL(for: uuid))
         try Data("large".utf8).write(to: library.largeThumbnailURL(for: uuid))
     }
+
+    func generateThumbnails(for imagePath: String, uuid: String) throws -> ThumbnailResult {
+        guard let id = UUID(uuidString: uuid) else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        try writeThumbnails(from: URL(fileURLWithPath: imagePath), uuid: id)
+        return ThumbnailResult(
+            smallPath: library.smallThumbnailURL(for: id).path,
+            largePath: library.largeThumbnailURL(for: id).path
+        )
+    }
 }

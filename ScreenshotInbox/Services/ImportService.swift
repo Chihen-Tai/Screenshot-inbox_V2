@@ -296,4 +296,7 @@ private struct NullMetadataReader: ImageMetadataReading {
 
 private struct NullThumbnailService: ThumbnailGenerating {
     func writeThumbnails(from sourceURL: URL, uuid: UUID) throws {}
+    func generateThumbnails(for imagePath: String, uuid: String) throws -> ThumbnailResult {
+        ThumbnailResult(smallPath: "", largePath: "")
+    }
 }

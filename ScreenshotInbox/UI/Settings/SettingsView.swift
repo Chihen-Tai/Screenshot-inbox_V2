@@ -2,6 +2,9 @@ import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Hashable {
     case general = "General"
+    case captureSettings = "Screenshot Capture"
+    case floatingPreview = "Floating Preview"
+    case menuBar = "Menu Bar"
     case library = "Library"
     case autoImport = "Auto Import"
     case privacy = "Privacy"
@@ -47,6 +50,13 @@ struct SettingsView: View {
                 switch selectedTab {
                 case .general:
                     GeneralSettingsView()
+                case .captureSettings:
+                    ScreenshotSettingsView()
+                case .floatingPreview:
+                    FloatingPreviewSettingsView()
+                        .onAppear { print("[Settings] Floating Preview section loaded") }
+                case .menuBar:
+                    MenuBarSettingsView()
                 case .library:
                     LibrarySettingsView()
                 case .autoImport:
@@ -70,7 +80,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(minWidth: 800, idealWidth: 900, minHeight: 520, idealHeight: 620)
     }
 }
 

@@ -43,6 +43,17 @@ final class MacThumbnailService: ThumbnailGenerating {
         #endif
     }
 
+    func generateThumbnails(for imagePath: String, uuid: String) throws -> ThumbnailResult {
+        guard let id = UUID(uuidString: uuid) else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        try writeThumbnails(from: URL(fileURLWithPath: imagePath), uuid: id)
+        return ThumbnailResult(
+            smallPath: library.smallThumbnailURL(for: id).path,
+            largePath: library.largeThumbnailURL(for: id).path
+        )
+    }
+
     // MARK: - Helpers
 
     private func writeJPEG(from source: CGImageSource, maxPixel: CGFloat, to url: URL) throws {

@@ -105,6 +105,19 @@ final class ExportShareService {
         return urls.count
     }
 
+    func copyForCommand(_ screenshots: [Screenshot], to pasteboard: NSPasteboard = .general) -> Int {
+        let urls = fileURLs(for: screenshots)
+        guard !urls.isEmpty else { return 0 }
+        pasteboard.clearContents()
+        if screenshots.count == 1,
+           let image = NSImage(contentsOf: urls[0]) {
+            pasteboard.writeObjects([urls[0] as NSURL, image])
+        } else {
+            pasteboard.writeObjects(urls as [NSURL])
+        }
+        return urls.count
+    }
+
     func copyFilePaths(_ screenshots: [Screenshot], to pasteboard: NSPasteboard = .general) -> Int {
         let paths = fileURLs(for: screenshots).map(\.path)
         guard !paths.isEmpty else { return 0 }

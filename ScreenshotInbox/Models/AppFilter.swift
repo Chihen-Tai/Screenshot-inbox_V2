@@ -28,7 +28,7 @@ enum FilterChip: String, CaseIterable, Hashable {
 
 /// Concrete sidebar destinations for the prototype.
 enum SidebarSelection: Hashable {
-    case inbox, recent, favorites, untagged, trash
+    case inbox, recent, favorites, untagged, trash, settings
     case collection(String)
     case smart(SmartView)
 
@@ -39,6 +39,7 @@ enum SidebarSelection: Hashable {
         case .favorites: return "Favorites"
         case .untagged: return "Untagged"
         case .trash: return "Trash"
+        case .settings: return "Settings"
         case .collection(let n): return n
         case .smart(let v): return v.title
         }

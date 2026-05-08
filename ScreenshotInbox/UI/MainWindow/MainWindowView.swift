@@ -4,8 +4,7 @@ import AppKit
 /// Window chrome:
 /// - `navigationTitle` shows the current sidebar section ("Inbox", "OCR Pending"…).
 /// - `navigationSubtitle` shows a quiet item count, Photos/Mail-style.
-/// - The app name lives on the `WindowGroup`, so it stays in the dock/menu
-///   bar without competing with the section title.
+/// - Legacy full-window inbox view retained for non-floating prototype code.
 struct MainWindowView: View {
     @EnvironmentObject private var appState: AppState
     @AppStorage(FirstRunOnboarding.preferenceKey) private var hasSeenOnboarding = false
@@ -46,10 +45,10 @@ struct MainWindowView: View {
                     onRunRulesNow: appState.runRulesNowForSelection,
                     onRebuildThumbnails: appState.rebuildAllThumbnails,
                     onOpenSettings: {
-                        SettingsWindowOpener.open(appState: appState)
+                        appState.openSettings()
                     },
                     onCustomizeFilters: {
-                        SettingsWindowOpener.open(appState: appState, selectedTab: .quickFilters)
+                        appState.openSettings()
                     }
                 )
             }
@@ -151,7 +150,7 @@ struct MainWindowView: View {
                     },
                     onOpenSettings: {
                         hasSeenOnboarding = true
-                        SettingsWindowOpener.open(appState: appState)
+                        appState.openSettings()
                     }
                 )
             }
@@ -199,6 +198,7 @@ struct MainWindowView: View {
     }
 
     private var itemCountText: String {
+        guard appState.sidebarSelection != .settings else { return "" }
         let n = appState.filteredScreenshots.count
         return n == 1 ? "1 item" : "\(n) items"
     }

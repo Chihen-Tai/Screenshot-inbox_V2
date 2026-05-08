@@ -20,6 +20,9 @@ final class WindowShortcutController {
     var onTrash: (() -> Void)?
     /// Phase 5 — Space (keyCode 49). Toggles preview overlay.
     var onPreview: (() -> Void)?
+    var onCopy: (() -> Void)?
+    var onReveal: (() -> Void)?
+    var onOpen: (() -> Void)?
     var onPreviewPrevious: (() -> Bool)?
     var onPreviewNext: (() -> Bool)?
     /// Phase 5 — Return / Enter (keyCode 36). Opens rename sheet.
@@ -88,6 +91,31 @@ final class WindowShortcutController {
             return nil
         }
 
+        if isCommandOnly, key?.lowercased() == "c" {
+            print("[Shortcut] Cmd+C detected, calling onCopy")
+            onCopy?()
+            return nil
+        }
+
+        if isCommandOnly, key?.lowercased() == "r" {
+            print("[Shortcut] Cmd+R detected, calling onReveal")
+            onReveal?()
+            return nil
+        }
+
+        if isCommandOnly, key?.lowercased() == "o" {
+            print("[Shortcut] Cmd+O detected, calling onOpen")
+            onOpen?()
+            return nil
+        }
+
+        // Cmd-Delete / Cmd-Forward-Delete → trash selected (with confirmation).
+        if isCommandOnly && (event.keyCode == 51 || event.keyCode == 117) {
+            print("[Shortcut] Cmd+Delete detected, calling onTrash")
+            onTrash?()
+            return nil
+        }
+
         // Escape: keyCode 53, or ESC character (\u{1b}).
         if event.keyCode == 53 || key == "\u{1b}" {
             print("[Shortcut] Escape detected, calling onClearSelection")
@@ -100,7 +128,7 @@ final class WindowShortcutController {
         let isPlainKey = flags.isEmpty || flags == .function
 
         // Delete / Forward-Delete → mock trash.
-        if isPlainKey, event.keyCode == 51 || event.keyCode == 117 {
+        if isPlainKey && (event.keyCode == 51 || event.keyCode == 117) {
             print("[Shortcut] Delete detected, calling onTrash")
             onTrash?()
             return nil

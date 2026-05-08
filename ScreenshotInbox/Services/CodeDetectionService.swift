@@ -6,7 +6,7 @@ struct CodeDetectionResult: Hashable {
     var isURL: Bool
 }
 
-protocol CodeDetectionService {
+protocol CodeDetectionService: CodeDetecting {
     func detectCodes(for screenshot: Screenshot) async throws -> [CodeDetectionResult]
 }
 

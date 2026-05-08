@@ -52,14 +52,12 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             Divider().opacity(0.35)
             Button {
-                #if DEBUG
-                print("[Settings] sidebar settings clicked")
-                #endif
-                openSettingsPreservingSelection()
+                print("[Settings] Settings clicked from sidebar")
+                AppWindowRouter.shared.openSettings()
             } label: {
                 SidebarItemView(
                     item: SidebarItem(
-                        selection: .inbox,
+                        selection: .settings,
                         title: viewModel.settingsAction.title,
                         systemImage: viewModel.settingsAction.systemImage,
                         count: nil
@@ -72,27 +70,6 @@ struct SidebarView: View {
             .padding(.vertical, 6)
         }
         .background(.regularMaterial)
-    }
-
-    private func openSettingsPreservingSelection() {
-        let preservedSelection = appState.sidebarSelection
-        SettingsWindowOpener.open(appState: appState)
-        if appState.sidebarSelection != preservedSelection {
-            #if DEBUG
-            print("[BUG] Settings should not load screenshots")
-            print("[Settings] restoring destination after unexpected change: \(preservedSelection?.displayTitle ?? "nil")")
-            #endif
-            appState.sidebarSelection = preservedSelection
-        }
-        DispatchQueue.main.async {
-            if appState.sidebarSelection != preservedSelection {
-                #if DEBUG
-                print("[BUG] Settings should not load screenshots")
-                print("[Settings] restoring deferred destination: \(preservedSelection?.displayTitle ?? "nil")")
-                #endif
-                appState.sidebarSelection = preservedSelection
-            }
-        }
     }
 
     @ViewBuilder
@@ -255,7 +232,7 @@ struct SidebarView: View {
                 appState.sidebarSelection = item.selection
                 appState.exportCurrentCollection()
             }
-        case .smart:
+        case .smart, .settings:
             EmptyView()
         }
     }

@@ -64,19 +64,27 @@ final class ScreenshotActionRouter {
 
     func quickLook(_ shots: [Screenshot]) {
         log("quickLook", shots)
-        guard let first = shots.first else { return }
-        appState.beginPreview(startingAt: first, navigationShots: shots.count > 1 ? shots : nil)
+        let urls = managedOriginalURLs(for: shots)
+        guard !urls.isEmpty else {
+            appState.showToast("File not found", kind: .info)
+            return
+        }
+        QuickLookPreviewController.shared.open(urls: urls)
     }
 
     func revealInFinder(_ shots: [Screenshot]) {
         log("revealInFinder", shots)
-        guard let url = managedOriginalURL(for: shots.first) else { return }
-        do {
-            try appState.fileActionService.revealInFinder(url)
-            appState.showToast("Revealed in Finder", kind: .success)
-        } catch {
-            appState.showToast(fileActionMessage(for: error), kind: .info)
+        let urls = managedOriginalURLs(for: shots)
+        guard !urls.isEmpty else {
+            appState.showToast("File not found", kind: .info)
+            return
         }
+        print("[Reveal] revealing \(urls.count) item(s)")
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+        appState.showToast(
+            urls.count == 1 ? "Revealed in Finder" : "Revealed \(urls.count) files in Finder",
+            kind: .success
+        )
     }
 
     func rename(_ shot: Screenshot) {
@@ -115,6 +123,7 @@ final class ScreenshotActionRouter {
             appState.showToast("No image files available", kind: .info)
             return
         }
+        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) image\(count == 1 ? "" : "s")", kind: .success)
     }
 
@@ -125,7 +134,19 @@ final class ScreenshotActionRouter {
             appState.showToast("No files available", kind: .info)
             return
         }
+        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) file\(count == 1 ? "" : "s")", kind: .success)
+    }
+
+    func copyForCommand(_ shots: [Screenshot]) {
+        log("copyForCommand", shots)
+        let count = appState.exportShareService.copyForCommand(shots)
+        guard count > 0 else {
+            appState.showToast("No files available", kind: .info)
+            return
+        }
+        print("[Copy] copied \(count) item(s)")
+        appState.showToast("Copied \(count) item\(count == 1 ? "" : "s")", kind: .success)
     }
 
     func copyFilePaths(_ shots: [Screenshot]) {
@@ -135,6 +156,7 @@ final class ScreenshotActionRouter {
             appState.showToast("No file paths available", kind: .info)
             return
         }
+        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) file path\(count == 1 ? "" : "s")", kind: .success)
     }
 
@@ -236,7 +258,22 @@ final class ScreenshotActionRouter {
     func moveToTrash(_ shots: [Screenshot]) {
         log("moveToTrash", shots)
         guard !shots.isEmpty else { return }
+        let n = shots.count
+        let alert = NSAlert()
+        alert.messageText = n == 1
+            ? "Move 1 screenshot to Trash?"
+            : "Move \(n) screenshots to Trash?"
+        alert.informativeText = "You can restore screenshots from the Trash."
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        print("[Trash] confirmation shown for \(n) item(s)")
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            print("[Trash] confirmation cancelled for \(n) item(s)")
+            return
+        }
         appState.trash(ids: Set(shots.map(\.id)))
+        print("[Trash] moved to trash \(n) item(s)")
     }
 
     func restoreFromTrash(_ shots: [Screenshot]) {
@@ -327,7 +364,26 @@ final class ScreenshotActionRouter {
             appState.showToast("File not found", kind: .info)
             return nil
         }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("[MissingFile] file missing url = \(url.path)")
+            appState.showToast("File not found", kind: .info)
+            return nil
+        }
         return url
+    }
+
+    private func managedOriginalURLs(for shots: [Screenshot]) -> [URL] {
+        shots.compactMap { shot in
+            guard let url = appState.thumbnailProvider.originalURL(for: shot) else {
+                print("[MissingFile] file missing url = \(shot.originalPath ?? shot.name)")
+                return nil
+            }
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("[MissingFile] file missing url = \(url.path)")
+                return nil
+            }
+            return url
+        }
     }
 
     private func fileActionMessage(for error: Error) -> String {

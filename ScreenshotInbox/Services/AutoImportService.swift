@@ -2,6 +2,8 @@ import Foundation
 
 struct AutoImportResult {
     let source: ImportSource
+    let sourceURL: URL
+    let inboxOutcome: ScreenshotInboxStore.ImportOutcome
     let importResult: ImportResult
 }
 
@@ -13,6 +15,7 @@ final class AutoImportService {
     private let libraryRootURL: URL
     private let fileManager: FileManager
     private var pendingTasks: [String: Task<Void, Never>] = [:]
+    private var lastScannedDatesBySourceUUID: [String: Date] = [:]
     private var onResult: (@MainActor (AutoImportResult) -> Void)?
     private var onSourceFolderChanged: (@MainActor (ImportSource) -> Void)?
 
@@ -51,6 +54,12 @@ final class AutoImportService {
         do {
             let sources = try importSourceRepository.fetchEnabled()
                 .filter { !isLibraryOrInsideLibrary(URL(fileURLWithPath: $0.folderPath, isDirectory: true)) }
+            lastScannedDatesBySourceUUID = Dictionary(
+                uniqueKeysWithValues: sources.compactMap { source in
+                    guard let lastScannedAt = source.lastScannedAt ?? source.enabledSince else { return nil }
+                    return (source.uuid, lastScannedAt)
+                }
+            )
             debugLog("loaded sources: \(sources.map(\.folderPath))")
             fileWatcher.replaceWatchedSources(sources) { [weak self] source, urls in
                 Task { @MainActor in
@@ -118,12 +127,29 @@ final class AutoImportService {
         }
 
         debugLog("importing file: \(url.path)")
-        let result = await importService.importURLs([url])
-        do {
-            try importSourceRepository.updateLastScanned(uuid: source.uuid, date: Date())
-        } catch {
-            print("[AutoImport] last_scanned update failed: \(error)")
+        let inboxOutcome = ScreenshotInboxStore.shared.importScreenshotIfNeeded(url: url, source: .autoImport)
+        guard inboxOutcome.wasInserted else {
+            markSourceScanned(source)
+            pendingTasks.removeValue(forKey: key)
+            var duplicateResult = ImportResult()
+            if inboxOutcome.ignoredReason == .duplicate {
+                duplicateResult.duplicates = 1
+            }
+            if let onResult {
+                await MainActor.run {
+                    onResult(AutoImportResult(
+                        source: source,
+                        sourceURL: url.standardizedFileURL,
+                        inboxOutcome: inboxOutcome,
+                        importResult: duplicateResult
+                    ))
+                }
+            }
+            return
         }
+
+        let result = await importService.importURLs([url])
+        markSourceScanned(source)
         pendingTasks.removeValue(forKey: key)
         if result.imported.isEmpty && result.duplicates > 0 && result.failures.isEmpty {
             debugLog("skipped duplicate: \(url.lastPathComponent)")
@@ -131,7 +157,12 @@ final class AutoImportService {
         debugLog("imported count: \(result.imported.count)")
         if let onResult {
             await MainActor.run {
-                onResult(AutoImportResult(source: source, importResult: result))
+                onResult(AutoImportResult(
+                    source: source,
+                    sourceURL: url.standardizedFileURL,
+                    inboxOutcome: inboxOutcome,
+                    importResult: result
+                ))
             }
         }
     }
@@ -152,10 +183,6 @@ final class AutoImportService {
             if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
             return false
         }
-        guard AutoImportService.isSupportedImageURL(standardized) else {
-            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
-            return false
-        }
         guard !isLibraryOrInsideLibrary(standardized) else {
             if shouldLog { debugLog("ignored library file: \(standardized.path)") }
             return false
@@ -165,14 +192,29 @@ final class AutoImportService {
             return false
         }
         guard !requireEnabledSince || isNewEnough(standardized, source: source) else { return false }
+        guard AutoImportService.isSupportedImageURL(standardized) else {
+            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
+            return false
+        }
         return true
     }
 
     private func isNewEnough(_ url: URL, source: ImportSource) -> Bool {
-        guard let enabledSince = source.enabledSince else { return true }
+        guard let cutoff = lastScannedDatesBySourceUUID[source.uuid] ?? source.lastScannedAt ?? source.enabledSince else {
+            return true
+        }
         let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
         let date = values?.creationDate ?? values?.contentModificationDate ?? Date.distantPast
-        return date >= enabledSince.addingTimeInterval(-2)
+        return date >= cutoff.addingTimeInterval(-2)
+    }
+
+    private func markSourceScanned(_ source: ImportSource, at date: Date = Date()) {
+        lastScannedDatesBySourceUUID[source.uuid] = date
+        do {
+            try importSourceRepository.updateLastScanned(uuid: source.uuid, date: date)
+        } catch {
+            print("[AutoImport] last_scanned update failed: \(error)")
+        }
     }
 
     private func isLibraryOrInsideLibrary(_ url: URL) -> Bool {

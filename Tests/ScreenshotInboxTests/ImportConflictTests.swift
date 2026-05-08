@@ -158,4 +158,7 @@ private struct TestMetadataReader: ImageMetadataReading {
 
 private struct TestThumbnailService: ThumbnailGenerating {
     func writeThumbnails(from sourceURL: URL, uuid: UUID) throws {}
+    func generateThumbnails(for imagePath: String, uuid: String) throws -> ThumbnailResult {
+        ThumbnailResult(smallPath: "", largePath: "")
+    }
 }

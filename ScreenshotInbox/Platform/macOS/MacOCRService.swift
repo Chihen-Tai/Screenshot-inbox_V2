@@ -18,6 +18,14 @@ final class MacOCRService: OCRService {
 
     func recognizeText(for screenshot: Screenshot) async throws -> OCRRecognitionResult {
         let imageURL = try imageURL(for: screenshot)
+        return try await recognizeText(at: imageURL, languages: preferredLanguagesProvider())
+    }
+
+    func recognizeText(imagePath: String, languages: [String]) async throws -> OCRRecognitionResult {
+        try await recognizeText(at: URL(fileURLWithPath: imagePath), languages: languages)
+    }
+
+    private func recognizeText(at imageURL: URL, languages: [String]) async throws -> OCRRecognitionResult {
         let preferredLanguages = preferredLanguagesProvider()
         return try await Task.detached(priority: .utility) {
             let request = VNRecognizeTextRequest()
@@ -25,7 +33,7 @@ final class MacOCRService: OCRService {
             request.usesLanguageCorrection = true
             request.recognitionLanguages = Self.preferredRecognitionLanguages(
                 for: request,
-                desired: preferredLanguages
+                desired: languages.isEmpty ? preferredLanguages : languages
             )
             #if DEBUG
             print("[OCR] input image path: \(imageURL.path)")

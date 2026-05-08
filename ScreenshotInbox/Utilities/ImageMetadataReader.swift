@@ -2,20 +2,6 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Plain image-metadata payload. Platform-neutral by intent — the macOS
-/// ImageIO reader produces this struct, but a Windows port would produce the
-/// same shape from WIC.
-struct ImageMetadata {
-    var width: Int
-    var height: Int
-    var byteSize: Int
-    /// Display format: "PNG" / "JPEG" / "HEIC" / "TIFF" / etc.
-    var format: String
-    /// Best-effort capture timestamp. Priority: EXIF DateTimeOriginal →
-    /// filesystem creation date → `Date()`.
-    var createdAt: Date
-}
-
 enum ImageMetadataError: Error, CustomStringConvertible {
     case unreadable(URL)
     var description: String {

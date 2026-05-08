@@ -265,6 +265,14 @@ private struct MultiActionsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Actions")
             VStack(spacing: 0) {
+                row(title: "Copy Files", systemImage: "doc.on.doc") {
+                    appState.router.copyFiles(appState.selectedScreenshots)
+                }
+                rowDivider
+                row(title: "Reveal in Finder", systemImage: "magnifyingglass") {
+                    appState.router.revealInFinder(appState.selectedScreenshots)
+                }
+                rowDivider
                 row(title: "Merge PDF", systemImage: "doc.on.doc") {
                     appState.router.mergeIntoPDF(appState.selectedScreenshots)
                 }

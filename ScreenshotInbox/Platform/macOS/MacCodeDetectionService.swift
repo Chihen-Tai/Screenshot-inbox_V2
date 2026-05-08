@@ -12,6 +12,14 @@ final class MacCodeDetectionService: CodeDetectionService {
 
     func detectCodes(for screenshot: Screenshot) async throws -> [CodeDetectionResult] {
         let imageURL = try imageURL(for: screenshot)
+        return try await detectCodes(at: imageURL)
+    }
+
+    func detectCodes(imagePath: String) async throws -> [CodeDetectionResult] {
+        try await detectCodes(at: URL(fileURLWithPath: imagePath))
+    }
+
+    private func detectCodes(at imageURL: URL) async throws -> [CodeDetectionResult] {
         return try await Task.detached(priority: .utility) {
             let request = VNDetectBarcodesRequest()
             request.symbologies = Self.supportedSymbologies(for: request)

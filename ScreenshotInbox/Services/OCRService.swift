@@ -6,7 +6,7 @@ struct OCRRecognitionResult {
     var confidence: Double?
 }
 
-protocol OCRService {
+protocol OCRService: OCRRecognizing {
     func recognizeText(for screenshot: Screenshot) async throws -> OCRRecognitionResult
 }
 

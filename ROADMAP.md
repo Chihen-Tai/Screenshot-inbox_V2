@@ -19,6 +19,8 @@ This roadmap tracks open-source release readiness and near-term product work. It
 - Duplicate detection and cleanup tools
 - Library maintenance and repair tools
 - Layout polish for sidebar, grid, toolbar, and inspector
+- Phase 23 platform boundary documentation and Core/Platform protocol split
+- Phase 24 read-only Windows library reader prototype
 - GitHub release cleanup
 
 ## Planned Before v0.1.0-alpha
@@ -40,4 +42,4 @@ This roadmap tracks open-source release readiness and near-term product work. It
 - Export presets
 - Better large-library performance tuning
 - Optional sample library for demos
-- Future Windows preparation and platform boundary review
+- Full Windows app after the read-only prototype validates library compatibility

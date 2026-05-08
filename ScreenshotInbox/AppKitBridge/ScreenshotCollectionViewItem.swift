@@ -254,7 +254,15 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
             thumbnailHost.isHidden = false
         }
         nameField.stringValue = screenshot.name
-        dateField.stringValue = Self.dateFormatter.string(from: screenshot.createdAt)
+        if let thumbnailProvider,
+           thumbnailProvider.originalURL(for: screenshot) != nil,
+           !thumbnailProvider.originalExists(for: screenshot) {
+            dateField.stringValue = "File missing"
+            dateField.textColor = NSColor.systemRed.withAlphaComponent(0.78)
+        } else {
+            dateField.stringValue = Self.dateFormatter.string(from: screenshot.createdAt)
+            dateField.textColor = .secondaryLabelColor
+        }
     }
 
     override var isSelected: Bool {

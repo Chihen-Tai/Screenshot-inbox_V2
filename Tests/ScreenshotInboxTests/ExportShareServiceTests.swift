@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import ScreenshotInbox
@@ -40,6 +41,51 @@ struct ExportShareServiceTests {
         #expect(content.contains("## with.png"))
         #expect(content.contains("Hello\nWorld"))
         #expect(!content.contains("without.png"))
+    }
+
+    @Test
+    func commandCopyWritesSingleFileURLAndMultipleFileURLs() throws {
+        let root = try makeRoot()
+        let originals = root.appendingPathComponent("Originals", isDirectory: true)
+        try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true)
+        let firstURL = originals.appendingPathComponent("first.png")
+        let secondURL = originals.appendingPathComponent("second.png")
+        try Data([1, 2, 3]).write(to: firstURL)
+        try Data([4, 5, 6]).write(to: secondURL)
+        let first = makeScreenshot(name: "first.png", libraryPath: "Originals/first.png")
+        let second = makeScreenshot(name: "second.png", libraryPath: "Originals/second.png")
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("ScreenshotInboxCommandCopy-\(UUID().uuidString)"))
+        let service = ExportShareService(libraryRootURL: root)
+
+        let singleCount = service.copyForCommand([first], to: pasteboard)
+        let singleURLs = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL]
+
+        #expect(singleCount == 1)
+        #expect(singleURLs == [firstURL])
+
+        let multiCount = service.copyForCommand([first, second], to: pasteboard)
+        let multiURLs = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL]
+
+        #expect(multiCount == 2)
+        #expect(multiURLs == [firstURL, secondURL])
+    }
+
+    @Test
+    func quickLookFiltersMissingFilesBeforeOpening() throws {
+        let root = try makeRoot()
+        let existing = root.appendingPathComponent("existing.png")
+        let missing = root.appendingPathComponent("missing.png")
+        try Data([1, 2, 3]).write(to: existing)
+
+        let items = QuickLookPreviewController.previewItems(for: [existing, missing])
+
+        #expect(items.compactMap { $0.previewItemURL } == [existing.standardizedFileURL])
     }
 
     private func makeRoot() throws -> URL {
