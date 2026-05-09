@@ -14,6 +14,19 @@ Screenshot Inbox watches for screenshots, keeps them in a visual library, and gi
 
 > **Alpha status:** Screenshot Inbox is usable for hands-on testing, but it is still pre-release software. Keep backups of important screenshots and expect rough edges around packaging, permissions, and some advanced workflows.
 
+## Install With Git Clone (Recommended)
+
+The recommended way to try Screenshot Inbox during alpha is to build and run it from source:
+
+```bash
+git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
+cd Screenshot-inbox_V2
+swift build
+swift run ScreenshotInbox
+```
+
+Requires macOS 14 or later and Swift 5.10 or later. If you prefer Xcode, open `Package.swift` after cloning.
+
 ## Why Use It?
 
 Finder is good at storing files. Screenshot Inbox is built for the messy few minutes after you capture something.
@@ -320,4 +333,3 @@ Bug reports should include macOS version, Swift/Xcode version if building from s
 ## License
 
 Screenshot Inbox is released under the MIT License. See [LICENSE](LICENSE).
-
