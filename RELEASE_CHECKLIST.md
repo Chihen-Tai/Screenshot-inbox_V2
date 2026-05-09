@@ -1,6 +1,6 @@
 # Screenshot Inbox Alpha Release Checklist
 
-Version: `0.4.0-alpha` | Build: `4`
+Version: `0.6.0-alpha` | Build: `5`
 
 Use this checklist before tagging an alpha build. The goal is stabilization for real user testing, not new feature work.
 

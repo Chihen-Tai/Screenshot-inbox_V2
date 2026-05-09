@@ -4,15 +4,15 @@ This project is prepared for GitHub distribution outside the Mac App Store. It i
 
 ## Current Version
 
-- Development version: `0.4.0-alpha-dev`
-- Final alpha version: `0.4.0-alpha`
-- Build: `4`
+- Development version: `0.6.0-alpha-dev`
+- Final alpha version: `0.6.0-alpha`
+- Build: `5`
 - Bundle identifier placeholder: `com.chihentai.screenshotinbox`
 - License: MIT
 
-Development builds use the `-dev` suffix, are for local testing, and may not be notarized. Do not produce final `0.4.0-alpha` artifacts until the current bugfix checklist and manual tests pass.
+Development builds use the `-dev` suffix, are for local testing, and may not be notarized. Do not produce final `0.6.0-alpha` artifacts until the current bugfix checklist and manual tests pass.
 
-Final alpha release builds use `0.4.0-alpha` with build `4` and are produced only after the bugfix checklist passes.
+Final alpha release builds use `0.6.0-alpha` with build `5` and are produced only after the bugfix checklist passes.
 
 Version values are defined in:
 
@@ -85,8 +85,8 @@ The app uses the native macOS About panel from `AppCommands`.
 Expected About content:
 
 - App name: Screenshot Inbox
-- Version: 0.4.0-alpha-dev during testing; 0.4.0-alpha for final alpha
-- Build: 4
+- Version: 0.6.0-alpha-dev during testing; 0.6.0-alpha for final alpha
+- Build: 5
 - Copyright: Copyright © 2026 Chihen Tai
 - License: MIT
 - Description: A local-first macOS screenshot organizer.
@@ -128,7 +128,7 @@ scripts/package-zip.sh
 Output:
 
 ```text
-dist/ScreenshotInbox-0.4.0-alpha-dev.zip
+dist/ScreenshotInbox-0.6.0-alpha-dev.zip
 ```
 
 DMG package:
@@ -140,7 +140,7 @@ scripts/package-dmg.sh
 Output:
 
 ```text
-dist/ScreenshotInbox-0.4.0-alpha-dev.dmg
+dist/ScreenshotInbox-0.6.0-alpha-dev.dmg
 ```
 
 The DMG script creates a simple disk image with the app bundle and an Applications shortcut. It does not use custom artwork.
@@ -245,22 +245,22 @@ APPLE_ID="your-apple-id@example.com" \
 TEAM_ID="YOURTEAMID" \
 APP_SPECIFIC_PASSWORD="@keychain:AC_PASSWORD" \
 BUNDLE_ID="com.chihentai.screenshotinbox" \
-scripts/notarize.sh dist/ScreenshotInbox-0.4.0-alpha.dmg
+scripts/notarize.sh dist/ScreenshotInbox-0.6.0-alpha.dmg
 ```
 
 Reference command shape (placeholders only — never commit credentials):
 
 ```bash
-xcrun notarytool submit "dist/ScreenshotInbox-0.4.0-alpha.dmg" \
+xcrun notarytool submit "dist/ScreenshotInbox-0.6.0-alpha.dmg" \
   --apple-id "your-apple-id@example.com" \
   --team-id "YOURTEAMID" \
   --password "@keychain:AC_PASSWORD" \
   --wait
 
-xcrun stapler staple "dist/ScreenshotInbox-0.4.0-alpha.dmg"
-xcrun stapler validate "dist/ScreenshotInbox-0.4.0-alpha.dmg"
+xcrun stapler staple "dist/ScreenshotInbox-0.6.0-alpha.dmg"
+xcrun stapler validate "dist/ScreenshotInbox-0.6.0-alpha.dmg"
 spctl -a -vv --type open --context context:primary-signature \
-  "dist/ScreenshotInbox-0.4.0-alpha.dmg"
+  "dist/ScreenshotInbox-0.6.0-alpha.dmg"
 ```
 
 Create an app-specific password from Apple ID account settings, or store it in the macOS keychain and reference it with the `@keychain:` prefix.
@@ -305,7 +305,7 @@ Current release notes for users:
 10. Signing/notarization scripts.
     Expected: scripts use placeholders only and no credentials are committed.
 
-## 0.4.0-alpha-dev Local Test Checklist
+## 0.6.0-alpha-dev Local Test Checklist
 
 - [ ] Update version (`AppReleaseInfo.swift`, `build-release.sh`, `package-zip.sh`, `package-dmg.sh`).
 - [ ] Update `CHANGELOG.md`.
@@ -323,14 +323,14 @@ Current release notes for users:
 - [ ] Confirm no DEBUG-only UI is reachable in Release.
 - [ ] Confirm no local user paths are bundled into resources.
 
-## Final 0.4.0-alpha Release Gate
+## Final 0.6.0-alpha Release Gate
 
 Only after the bugfix manual checklist passes:
 
-- Change `CFBundleShortVersionString` / `AppReleaseInfo.version` from `0.4.0-alpha-dev` to `0.4.0-alpha`.
-- Keep `CFBundleVersion` / `AppReleaseInfo.build` at `4`.
-- Package `dist/ScreenshotInbox-0.4.0-alpha.zip`.
-- Package `dist/ScreenshotInbox-0.4.0-alpha.dmg` only if DMG packaging is used.
+- Change `CFBundleShortVersionString` / `AppReleaseInfo.version` from `0.6.0-alpha-dev` to `0.6.0-alpha`.
+- Keep `CFBundleVersion` / `AppReleaseInfo.build` at `5`.
+- Package `dist/ScreenshotInbox-0.6.0-alpha.zip`.
+- Package `dist/ScreenshotInbox-0.6.0-alpha.dmg` only if DMG packaging is used.
 - Update `CHANGELOG.md`.
 - Create or prepare the GitHub release draft after the final package exists.
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${VERSION:-0.4.0-alpha-dev}"
+VERSION="${VERSION:-0.6.0-alpha-dev}"
 APP_NAME="Screenshot Inbox"
 APP_PATH="$ROOT_DIR/dist/$APP_NAME.app"
 ZIP_PATH="$ROOT_DIR/dist/ScreenshotInbox-$VERSION.zip"

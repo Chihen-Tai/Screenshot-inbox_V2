@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.0-alpha
+
+- Compact floating preview panel with native macOS close button, dynamic height by item count, and stable top-right anchor on resize.
+- Removed high-frequency debug prints from selection, keyboard, menu bar, floating panel, and collection view paths (alpha stabilization).
+- Bumped version to 0.6.0-alpha, build 5.
+
 ## 0.4.0-alpha
 
 - Stabilized Settings, Source Folder Sync, clipboard, sidebar, layout, and core library workflows for the macOS release freeze.
