@@ -1,12 +1,18 @@
 # Screenshot Inbox
 
-Screenshot Inbox is a native macOS app for collecting, organizing, searching, and exporting screenshots. It is local-first, uses a managed library on your Mac, and supports OCR, QR code detection, tags, collections, PDF export, and cleanup tools.
+A screenshot inbox that keeps your screenshots until you are ready.
 
-## Overview
+Screenshot Inbox is a native macOS app for collecting, organizing, searching, and exporting screenshots. It is local-first, uses a managed library on your Mac, and supports a Floating Preview tray, OCR, QR code detection, tags, collections, PDF export, and cleanup tools.
 
-Screenshot Inbox helps keep screenshots out of scattered folders by importing them into a local managed library. From there, you can organize screenshots with tags and collections, search by filename or extracted text, detect QR codes and links, export selected items, and safely clean up with app-level Trash and restore.
+> **Alpha status:** Screenshot Inbox is in active pre-release development. It is ready for hands-on testing, but testers should expect bugs and rough edges.
 
-## Installation
+## Why it exists
+
+macOS shows a screenshot preview for only a few seconds. Screenshot Inbox keeps screenshots available in a persistent inbox so you can review, rename, tag, export, or delete them later.
+
+## Quick Start for Testers
+
+The safest way to test the alpha is to run from source. Unsigned app bundles or DMGs may trigger macOS security warnings.
 
 ```bash
 git clone https://github.com/Chihen-Tai/Screenshot-inbox_V2.git
@@ -17,31 +23,27 @@ swift run ScreenshotInbox
 
 The project is a Swift Package Manager executable target, not an Xcode project. If you prefer Xcode, open `Package.swift`.
 
-## Screenshots
+## Requirements
 
+- macOS 14 or later, based on the package platform declaration.
+- Swift 5.10 or later, based on `Package.swift`.
+- Xcode 15.3 or later is recommended for Swift 5.10 and macOS SDK support.
+- OCR and QR detection use Apple frameworks and require macOS support for the relevant Vision APIs.
 
-### Main window
+## What to Test
 
-![Main window](docs/images/main.png)
+See [`TESTING_GUIDE.md`](TESTING_GUIDE.md) for the full alpha tester checklist.
 
-### OCR and search
+A short smoke test:
 
-![OCR and QR](docs/images/qrocr.png)
-![Search](docs/images/search.png)
-
-### PDF export
-
-![PDF export](docs/images/pdf.png)
-
-### Settings
-
-![Settings](docs/images/setting.png)
-
-
-<!-- Add screenshot: docs/images/main-window.png -->
-<!-- Add screenshot: docs/images/ocr-and-search.png -->
-<!-- Add screenshot: docs/images/pdf-export.png -->
-<!-- Add screenshot: docs/images/settings.png -->
+1. Launch with `swift run ScreenshotInbox`.
+2. Take one macOS screenshot.
+3. Confirm the Floating Preview appears if auto-show is enabled.
+4. Confirm the screenshot appears exactly once in the Main Inbox.
+5. Take several screenshots quickly and check that the count is correct.
+6. Open Settings and verify Screenshot Capture, Floating Preview, and Menu Bar options.
+7. Try Copy, Reveal in Finder, Quick Look, drag-out, and PDF export.
+8. Quit and relaunch.
 
 ## Features
 
@@ -63,12 +65,43 @@ The project is a Swift Package Manager executable target, not an Xcode project. 
 - Duplicate and cleanup tools
 - Library maintenance and repair tools
 
-## Requirements
+## Screenshots
 
-- macOS 14 or later, based on the package platform declaration.
-- Swift 5.10 or later, based on `Package.swift`.
-- Xcode 15.3 or later is recommended for Swift 5.10 and macOS SDK support.
-- OCR and QR detection use Apple frameworks and require macOS support for the relevant Vision APIs.
+### Main window
+
+![Main window](docs/images/main.png)
+
+### OCR and search
+
+![OCR and QR](docs/images/qrocr.png)
+![Search](docs/images/search.png)
+
+### PDF export
+
+![PDF export](docs/images/pdf.png)
+
+### Settings
+
+![Settings](docs/images/setting.png)
+
+## Usage
+
+1. Import screenshots manually, or enable watched folders for auto import.
+2. The Floating Preview Panel appears automatically when new screenshots arrive if auto-show is enabled. The menu-bar badge shows the unreviewed count.
+3. Organize screenshots with collections, tags, and favorites.
+4. Use OCR and search to find screenshots by text, filenames, tags, collections, or detected codes.
+5. Use QR detection to open or copy links found in screenshots.
+6. Select screenshots and press Cmd+Shift+E to combine into a PDF, or Cmd+E to export originals. Both open a save panel and reveal the exported file in Finder.
+7. Use Trash and Restore for safe cleanup before permanent deletion.
+8. Use library maintenance tools if thumbnails, OCR records, or library files need repair.
+
+## Known Alpha Limitations
+
+- The app is not yet distributed through the Mac App Store.
+- Unsigned local builds may require source-based testing instead of a downloaded app bundle.
+- Some workflows may still have layout, routing, or state-sync bugs.
+- OCR, QR detection, PDF export, and duplicate cleanup should be treated as alpha features until more users test them.
+- Do not attach private screenshots to public bug reports unless you are comfortable sharing them.
 
 ## Release Builds
 
@@ -88,24 +121,13 @@ scripts/package-zip.sh
 
 Release packaging, signing, notarization, and manual QA steps are documented in `docs/RELEASE.md`.
 
-## Usage
-
-1. Import screenshots manually, or enable watched folders for auto import.
-2. The Floating Preview Panel appears automatically when new screenshots arrive and shows a quick-action tray. The menu-bar badge shows the unreviewed count.
-3. Organize screenshots with collections, tags, and favorites.
-4. Use OCR and search to find screenshots by text, filenames, tags, collections, or detected codes.
-5. Use QR detection to open or copy links found in screenshots.
-6. Select screenshots and press Cmd+Shift+E to combine into a PDF, or Cmd+E to export originals. Both open a save panel and reveal the exported file in Finder.
-7. Use Trash and Restore for safe cleanup before permanent deletion.
-8. Use library maintenance tools if thumbnails, OCR records, or library files need repair.
-
 ## Project Structure
 
 ```text
 ScreenshotInbox/
-  App/                 SwiftUI app entry, app state, commands, permissions
-  AppKitBridge/        NSCollectionView grid, selection, drag/drop, shortcuts
-  Core/                Shared protocols
+  App/                 SwiftUI app entry, app state, app commands, permissions, routing
+  AppKitBridge/        NSCollectionView grid, menu bar, floating preview, AppKit controllers
+  Core/                Shared service protocols
   Models/              App value types
   Persistence/         SQLite repositories and migrations
   Platform/macOS/      macOS-specific services
@@ -117,19 +139,30 @@ Tests/
   ScreenshotInboxTests/
 ```
 
-See `ARCHITECTURE.md` for more detail.
+See `ARCHITECTURE.md` and `docs/ARCHITECTURE.md` for more detail.
 
 ## Privacy
 
-Screenshot Inbox is local-first. It does not upload your screenshots or OCR text to any server.
+Screenshot Inbox is local-first. It does not upload your screenshots or OCR text to any server by default.
 
 Screenshots are stored in a local managed library on your Mac. OCR and QR detection run locally using Apple frameworks. No account is required, no telemetry or network services are included, and watched folders are limited to the folders configured in Settings. Import, rename, trash, and delete workflows operate on managed Screenshot Inbox copies by default, not the original source files on your Desktop, Downloads, or other folders. Optional Source Folder Sync settings can rename or move original source files to macOS Trash only when explicitly enabled.
 
+If future AI-provider features are enabled, review their settings and privacy notes before sending OCR text or metadata to an external provider.
+
 See `PRIVACY.md` for details.
+
+## Reporting Bugs
+
+Please use the GitHub issue templates:
+
+- **Bug report:** include macOS version, run method, commit hash, steps to reproduce, screenshots or screen recordings if safe, and console logs if available.
+- **Feature request:** describe the workflow problem and the desired behavior.
+
+Do not upload private screenshots or API keys in public issues.
 
 ## Current Status
 
-Screenshot Inbox is in active pre-release development. Core local-library, import, organization, OCR, QR detection, search, PDF export, trash, and maintenance workflows exist, but the project still needs release packaging, broader manual QA, and public issue triage before a stable release.
+Screenshot Inbox is in active pre-release development. Core local-library, import, organization, OCR, QR detection, search, PDF export, trash, and maintenance workflows exist, but the project still needs broader manual QA and public issue triage before a stable release.
 
 ## Roadmap
 
