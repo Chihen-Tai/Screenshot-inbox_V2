@@ -80,8 +80,6 @@ final class ImportService: ScreenshotImporting {
                     }
                 }
             }
-            print("[Import] done: imported=\(result.imported.count) " +
-                  "duplicates=\(result.duplicates) keptDuplicates=\(result.keptDuplicateCopies) replaced=\(result.replaced.count) failures=\(result.failures.count)")
             return result
         }.value
     }
@@ -105,21 +103,12 @@ final class ImportService: ScreenshotImporting {
         let largeThumbnailURL = library.largeThumbnailURL(for: uuid)
         do {
             try thumbnailService.writeThumbnails(from: destURL, uuid: uuid)
-            #if DEBUG
-            let fm = FileManager.default
-            print("[Import] small thumbnail: \(smallThumbnailURL.path) exists=\(fm.fileExists(atPath: smallThumbnailURL.path))")
-            print("[Import] large thumbnail: \(largeThumbnailURL.path) exists=\(fm.fileExists(atPath: largeThumbnailURL.path))")
-            #endif
         } catch {
             print("[Import] thumbnail generation failed for \(destURL.lastPathComponent): \(error)")
         }
 
         let now = Date()
         let relativePath = libraryRelativePath(for: destURL)
-        #if DEBUG
-        print("[SourceSync] imported managedPath=\(relativePath)")
-        print("[SourceSync] originalPath=\(url.path)")
-        #endif
 
         let shot = Screenshot(
             id: uuid,
@@ -185,10 +174,6 @@ final class ImportService: ScreenshotImporting {
         updated.modifiedAt = Date()
         updated.sourceApp = url.deletingLastPathComponent().path
         updated.originalPath = url.path
-        #if DEBUG
-        print("[SourceSync] imported managedPath=\(updated.libraryPath ?? "")")
-        print("[SourceSync] originalPath=\(url.path)")
-        #endif
         try repository.update(updated)
         return updated
     }

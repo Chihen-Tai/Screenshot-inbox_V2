@@ -79,7 +79,6 @@ final class ScreenshotActionRouter {
             appState.showToast("File not found", kind: .info)
             return
         }
-        print("[Reveal] revealing \(urls.count) item(s)")
         NSWorkspace.shared.activateFileViewerSelecting(urls)
         appState.showToast(
             urls.count == 1 ? "Revealed in Finder" : "Revealed \(urls.count) files in Finder",
@@ -123,7 +122,6 @@ final class ScreenshotActionRouter {
             appState.showToast("No image files available", kind: .info)
             return
         }
-        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) image\(count == 1 ? "" : "s")", kind: .success)
     }
 
@@ -134,7 +132,6 @@ final class ScreenshotActionRouter {
             appState.showToast("No files available", kind: .info)
             return
         }
-        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) file\(count == 1 ? "" : "s")", kind: .success)
     }
 
@@ -145,7 +142,6 @@ final class ScreenshotActionRouter {
             appState.showToast("No files available", kind: .info)
             return
         }
-        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) item\(count == 1 ? "" : "s")", kind: .success)
     }
 
@@ -156,7 +152,6 @@ final class ScreenshotActionRouter {
             appState.showToast("No file paths available", kind: .info)
             return
         }
-        print("[Copy] copied \(count) item(s)")
         appState.showToast("Copied \(count) file path\(count == 1 ? "" : "s")", kind: .success)
     }
 
@@ -267,13 +262,10 @@ final class ScreenshotActionRouter {
         alert.addButton(withTitle: "Move to Trash")
         alert.addButton(withTitle: "Cancel")
         alert.alertStyle = .warning
-        print("[Trash] confirmation shown for \(n) item(s)")
         guard alert.runModal() == .alertFirstButtonReturn else {
-            print("[Trash] confirmation cancelled for \(n) item(s)")
             return
         }
         appState.trash(ids: Set(shots.map(\.id)))
-        print("[Trash] moved to trash \(n) item(s)")
     }
 
     func restoreFromTrash(_ shots: [Screenshot]) {
@@ -286,7 +278,6 @@ final class ScreenshotActionRouter {
     }
 
     func restoreAllFromTrash() {
-        print("[Router] restoreAllFromTrash")
         appState.restoreAllFromTrash()
     }
 
@@ -296,7 +287,6 @@ final class ScreenshotActionRouter {
     }
 
     func emptyTrash() {
-        print("[Router] emptyTrash")
         appState.beginEmptyTrash()
     }
 
@@ -309,7 +299,6 @@ final class ScreenshotActionRouter {
     }
 
     func addDraggedScreenshotsToFavorites(ids: [UUID]) {
-        print("[Router] sidebar favorite drop ids=\(ids.map(\.uuidString))")
         let shots = appState.screenshots(for: ids).filter { !$0.isTrashed }
         guard !shots.isEmpty else { return }
         appState.setFavorite(ids: Set(shots.map(\.id)), isFavorite: true)
@@ -319,14 +308,12 @@ final class ScreenshotActionRouter {
     }
 
     func moveDraggedScreenshotsToTrash(ids: [UUID]) {
-        print("[Router] sidebar trash drop ids=\(ids.map(\.uuidString))")
         let shots = appState.screenshots(for: ids).filter { !$0.isTrashed }
         guard !shots.isEmpty else { return }
         moveToTrash(shots)
     }
 
     func addDraggedScreenshots(ids: [UUID], toCollection collectionUUID: String) {
-        print("[Router] sidebar collection drop collection=\(collectionUUID) ids=\(ids.map(\.uuidString))")
         let validIDs = appState.screenshots(for: ids).filter { !$0.isTrashed }.map(\.id)
         guard !validIDs.isEmpty else { return }
         appState.addScreenshots(ids: validIDs, toCollection: collectionUUID)
@@ -353,9 +340,6 @@ final class ScreenshotActionRouter {
     // MARK: - Diagnostics
 
     private func log(_ action: String, _ shots: [Screenshot]) {
-        let names = shots.prefix(3).map(\.name).joined(separator: ", ")
-        let extra = shots.count > 3 ? " (+\(shots.count - 3) more)" : ""
-        print("[Router] \(action) — \(shots.count) target(s): \(names)\(extra)")
     }
 
     private func managedOriginalURL(for shot: Screenshot?) -> URL? {

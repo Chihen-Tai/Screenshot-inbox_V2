@@ -116,33 +116,25 @@ final class ScreenshotInboxStore: ObservableObject {
     @discardableResult
     func importScreenshotIfNeeded(url: URL, source: ImportSource) -> ImportOutcome {
         let standardizedURL = normalizedFileURL(url)
-        print("[Import] source = \(source.rawValue) url = \(standardizedURL.path)")
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: standardizedURL.path, isDirectory: &isDirectory),
               !isDirectory.boolValue else {
             print("[Import] ignored missing url = \(standardizedURL.path)")
-            logCurrentItemCount()
             return .ignored(.missingFile)
         }
 
         guard Self.supportedExtensions.contains(standardizedURL.pathExtension.lowercased()) else {
-            print("[Import] ignored unsupported url = \(standardizedURL.path)")
-            logCurrentItemCount()
             return .ignored(.unsupportedFileType)
         }
 
         guard var fingerprint = fileFingerprint(for: standardizedURL),
               fingerprint.fileSize > 0,
               fingerprint.isRegularFile else {
-            print("[Import] ignored unsupported url = \(standardizedURL.path)")
-            logCurrentItemCount()
             return .ignored(.unsupportedFileType)
         }
 
         guard let stableFingerprint = waitForStableFingerprint(at: standardizedURL, initial: fingerprint) else {
-            print("[Import] ignored unstable url = \(standardizedURL.path)")
-            logCurrentItemCount()
             return .ignored(.fileStillChanging)
         }
         fingerprint = stableFingerprint
@@ -154,7 +146,6 @@ final class ScreenshotInboxStore: ObservableObject {
             fingerprint: fingerprint
         ) else {
             print("[Import] duplicate ignored url = \(standardizedURL.path)")
-            logCurrentItemCount()
             return .ignored(.duplicate)
         }
 
@@ -164,9 +155,6 @@ final class ScreenshotInboxStore: ObservableObject {
             resourceIdentifier: resourceIdentifier,
             fingerprint: fingerprint
         )
-        print("[Import] inserted item id = \(item.id)")
-        logCurrentItemCount()
-        logCount()
         return .inserted(item)
     }
 
@@ -177,8 +165,6 @@ final class ScreenshotInboxStore: ObservableObject {
 
     func dismiss(_ item: ScreenshotItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        let filename = items[index].url.lastPathComponent
-        print("[Dismiss] dismiss called for item: \(filename)")
         // Copy-then-reassign: in-place subscript element mutations on a @Published
         // array go through the array's _modify accessor and bypass willSet, so
         // $items never publishes and MenuBarController never refreshes the badge.
@@ -190,9 +176,6 @@ final class ScreenshotInboxStore: ObservableObject {
         if latestScreenshotID == item.id {
             latestScreenshotID = latestUndismissedItem?.id
         }
-        print("[Dismiss] item dismissed id = \(item.id)")
-        print("[Dismiss] isNew false, isDismissed true for \(filename)")
-        logCount()
     }
 
     func dismissCanonicalItems(ids: Set<UUID>) {
@@ -204,12 +187,9 @@ final class ScreenshotInboxStore: ObservableObject {
             updated[index].isNew = false
             updated[index].isDismissed = true
             dismissed += 1
-            print("[Dismiss] item dismissed id = \(updated[index].id)")
         }
         guard dismissed > 0 else { return }
         items = updated
-        print("[Dismiss] canonical dismiss count = \(dismissed)")
-        logCount()
     }
 
     /// Called by the import pipeline once the Phase 6 SQLite import succeeds.
@@ -219,7 +199,6 @@ final class ScreenshotInboxStore: ObservableObject {
         let standardized = normalizedFileURL(url)
         guard let index = items.firstIndex(where: { $0.url == standardized }) else { return }
         items[index].canonicalScreenshotID = id
-        print("[ScreenshotInboxStore] linked url=\(standardized.lastPathComponent) to canonical id=\(id)")
     }
 
     /// Removes a floating-inbox item by source URL. Called when Phase 6 import
@@ -235,8 +214,6 @@ final class ScreenshotInboxStore: ObservableObject {
             latestScreenshotID = latestUndismissedItem?.id
         }
         print("[ScreenshotInboxStore] removed failed-import item: \(standardized.lastPathComponent)")
-        logCurrentItemCount()
-        logCount()
     }
 
     func clearDismissed() {
@@ -246,8 +223,6 @@ final class ScreenshotInboxStore: ObservableObject {
         for id in dismissedIDs {
             unregisterIdentity(for: id)
         }
-        logCurrentItemCount()
-        logCount()
     }
 
     func copy(_ item: ScreenshotItem, to pasteboard: NSPasteboard = .general) {
@@ -262,8 +237,6 @@ final class ScreenshotInboxStore: ObservableObject {
            let tiffData = image.tiffRepresentation {
             pasteboard.setData(tiffData, forType: .tiff)
         }
-        print("[Copy] copied 1 item(s)")
-        print("[ScreenshotInboxStore] copied: \(item.url.path)")
     }
 
     func reveal(_ item: ScreenshotItem) {
@@ -271,7 +244,6 @@ final class ScreenshotInboxStore: ObservableObject {
             print("[MissingFile] file missing url = \(item.url.path)")
             return
         }
-        print("[Reveal] revealing 1 item(s)")
         NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
 
@@ -291,14 +263,11 @@ final class ScreenshotInboxStore: ObservableObject {
         alert.addButton(withTitle: "Move to Trash")
         alert.addButton(withTitle: "Cancel")
 
-        print("[Trash] confirmation shown for 1 item(s)")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         do {
             try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
             remove(item)
-            print("[Trash] moved to trash 1 item(s)")
-            print("[ScreenshotInboxStore] file moved to Trash: \(item.url.path)")
         } catch {
             let errorAlert = NSAlert(error: error)
             errorAlert.messageText = "Could not delete screenshot"
@@ -312,8 +281,6 @@ final class ScreenshotInboxStore: ObservableObject {
         if latestScreenshotID == item.id {
             latestScreenshotID = latestUndismissedItem?.id
         }
-        logCurrentItemCount()
-        logCount()
     }
 
     private func insertScreenshot(
@@ -413,13 +380,6 @@ final class ScreenshotInboxStore: ObservableObject {
         )
     }
 
-    private func logCurrentItemCount() {
-        print("[Import] current item count = \(items.count)")
-    }
-
-    private func logCount() {
-        print("[Count] newUndismissedCount = \(newUndismissedCount)")
-    }
 }
 
 private struct StoredIdentity {

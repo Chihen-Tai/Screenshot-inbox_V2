@@ -40,10 +40,6 @@ enum ScreenshotInboxSingleInstanceGuard {
         let running = NSWorkspace.shared.runningApplications.map(AppIdentity.init)
         let decision = evaluate(current: current, runningApplications: running)
 
-        print("[Lifecycle] app launched path = \(current.path)")
-        print("[Lifecycle] bundle id = \(current.bundleIdentifier ?? "nil")")
-        print("[Lifecycle] detected existing instance = \(decision.existingInstance?.path ?? "none")")
-
         if let existing = decision.existingInstance,
            current.path.contains("/.build/"),
            existing.path.hasPrefix("/Applications/") {
@@ -52,7 +48,7 @@ enum ScreenshotInboxSingleInstanceGuard {
 
         switch decision.result {
         case .keepCurrent:
-            print("[Lifecycle] single instance guard result = keep current pid \(current.processIdentifier)")
+            break
         case .terminateCurrent:
             print("[Lifecycle] single instance guard result = keep existing pid \(decision.existingInstance?.processIdentifier ?? -1), terminate current pid \(current.processIdentifier)")
             if let runningApp = NSWorkspace.shared.runningApplications.first(where: {
@@ -86,7 +82,6 @@ enum ScreenshotInboxSingleInstanceGuard {
 
                 guard action == .terminateLaunchedApplication else { return }
 
-                print("[Lifecycle] detected existing instance = \(launched.path)")
                 print("[Lifecycle] single instance guard result = keep current pid \(current.processIdentifier), terminate launched pid \(launched.processIdentifier)")
                 if !application.terminate() {
                     print("[Lifecycle] duplicate terminate request failed pid \(launched.processIdentifier)")

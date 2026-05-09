@@ -16,28 +16,19 @@ final class ScreenshotInboxWindowController: NSObject, NSWindowDelegate {
     private override init() {}
 
     func open(appState: AppState, source: AppWindowOpenSource) {
-        if source == .dock {
-            print("[MainInbox] show() called from Dock")
-        } else {
-            print("[MainInbox] show() called")
-        }
-        print("[MainInbox] store item count = \(appState.screenshotInboxStore.allItems.count)")
         QuickLookPreviewController.shared.close()
         FloatingInboxPanelController.shared.hide()
 
         if let existingWindow = window {
-            print("[MainInbox] reusing existing window")
             NSApp.setActivationPolicy(.regular)
             NSApp.unhide(nil)
             NSApp.activate(ignoringOtherApps: true)
             existingWindow.deminiaturize(nil)
             existingWindow.makeKeyAndOrderFront(nil)
             existingWindow.orderFrontRegardless()
-            print("[MainInbox] window made key and front")
             return
         }
 
-        print("[MainInbox] creating new window")
         let rootView = MainWindowView()
             .environmentObject(appState)
             .preferredColorScheme(colorScheme(for: appState.preferences.preferredAppearance))
@@ -70,7 +61,6 @@ final class ScreenshotInboxWindowController: NSObject, NSWindowDelegate {
         window.deminiaturize(nil)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        print("[MainInbox] window made key and front")
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

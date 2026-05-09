@@ -218,8 +218,6 @@ private final class MenuActionInvoker: NSObject {
             return
         }
         let targets = appState.selectedScreenshots
-        print("[ContextMenu] invoke key=\(key.rawValue) targets=\(targets.count)")
-        print("[ContextMenu] action = \(key.rawValue) target count = \(targets.count)")
 
         switch key {
         case .open:              router.open(targets)

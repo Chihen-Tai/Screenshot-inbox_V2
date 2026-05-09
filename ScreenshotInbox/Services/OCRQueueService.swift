@@ -95,9 +95,6 @@ final class OCRQueueService {
                 language: result.language,
                 confidence: result.confidence
             )
-            #if DEBUG
-            print("[OCR] complete \(job.screenshotUUID) chars=\(result.text.count)")
-            #endif
             onComplete?(job.screenshotUUID)
         } catch {
             do {

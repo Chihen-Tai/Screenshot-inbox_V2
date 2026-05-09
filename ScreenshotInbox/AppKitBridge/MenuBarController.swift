@@ -30,9 +30,7 @@ final class MenuBarController: NSObject {
     func refreshStatusItem() {
         guard let statusItem, let button = statusItem.button, let appState else { return }
         let count = appState.screenshotInboxStore.newUndismissedCount
-        print("[Count] newUndismissedCount = \(count)")
         button.title = appState.screenshotInboxPreferences.menuBarBadgeEnabled && count > 0 ? " \(count)" : ""
-        print("[MenuBar] badge updated = \(count)")
         statusItem.menu = makeMenu()
     }
 
@@ -67,7 +65,6 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openInbox() {
-        print("[MenuBar] Open Inbox clicked")
         appState?.openScreenshotInboxWindow()
     }
 
@@ -76,7 +73,6 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openSettings() {
-        print("[Settings] Settings clicked from menu bar")
         AppWindowRouter.shared.openSettings()
     }
 

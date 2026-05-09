@@ -23,10 +23,6 @@ final class MacCodeDetectionService: CodeDetectionService {
         return try await Task.detached(priority: .utility) {
             let request = VNDetectBarcodesRequest()
             request.symbologies = Self.supportedSymbologies(for: request)
-            #if DEBUG
-            print("[CodeDetection] input image path: \(imageURL.path)")
-            print("[CodeDetection] symbologies: \(request.symbologies.map(\.rawValue).joined(separator: ", "))")
-            #endif
 
             let handler = VNImageRequestHandler(url: imageURL, options: [:])
             try handler.perform([request])
@@ -46,9 +42,6 @@ final class MacCodeDetectionService: CodeDetectionService {
                     isURL: Self.isOpenableURL(payload)
                 )
             }
-            #if DEBUG
-            print("[CodeDetection] result count: \(results.count)")
-            #endif
             return results
         }.value
     }
@@ -56,7 +49,7 @@ final class MacCodeDetectionService: CodeDetectionService {
     private static func supportedSymbologies(for request: VNDetectBarcodesRequest) -> [VNBarcodeSymbology] {
         let desired: [VNBarcodeSymbology] = [.qr, .aztec, .pdf417, .ean13, .code128]
         if #available(macOS 12.0, *) {
-            let supported = Set(VNDetectBarcodesRequest.supportedSymbologies)
+            let supported = Set((try? request.supportedSymbologies()) ?? [])
             let filtered = desired.filter { supported.contains($0) }
             return filtered.isEmpty ? [.qr] : filtered
         }

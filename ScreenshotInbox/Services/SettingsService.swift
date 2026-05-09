@@ -45,7 +45,19 @@ final class SettingsService {
                 preferredAppearance: appearance,
                 ocrLanguagePreset: ocrPreset,
                 ocrPreferredLanguages: languages,
-                showDebugControls: bool(Keys.showDebugControls, fallback.showDebugControls)
+                showDebugControls: bool(Keys.showDebugControls, fallback.showDebugControls),
+                aiInlineSuggestionsEnabled: bool(Keys.aiInlineSuggestionsEnabled, fallback.aiInlineSuggestionsEnabled),
+                aiSuggestFilenames: bool(Keys.aiSuggestFilenames, fallback.aiSuggestFilenames),
+                aiSuggestTags: bool(Keys.aiSuggestTags, fallback.aiSuggestTags),
+                aiUseLocalRules: bool(Keys.aiUseLocalRules, fallback.aiUseLocalRules),
+                aiProvider: AIProvider(
+                    rawValue: defaults.string(forKey: Keys.aiProvider) ?? fallback.aiProvider.rawValue
+                ) ?? fallback.aiProvider,
+                googleAIStudioModel: GoogleAIStudioModel(
+                    rawValue: defaults.string(forKey: Keys.googleAIStudioModel) ?? fallback.googleAIStudioModel.rawValue
+                ) ?? fallback.googleAIStudioModel,
+                aiVisionEnabled: bool(Keys.aiVisionEnabled, fallback.aiVisionEnabled),
+                aiVisionOnlyWhenOCREmpty: bool(Keys.aiVisionOnlyWhenOCREmpty, fallback.aiVisionOnlyWhenOCREmpty)
             )
         }
         set { save(newValue) }
@@ -73,6 +85,14 @@ final class SettingsService {
         defaults.set(preferences.ocrLanguagePreset.rawValue, forKey: Keys.ocrLanguagePreset)
         defaults.set(preferences.ocrPreferredLanguages, forKey: Keys.ocrPreferredLanguages)
         defaults.set(preferences.showDebugControls, forKey: Keys.showDebugControls)
+        defaults.set(preferences.aiInlineSuggestionsEnabled, forKey: Keys.aiInlineSuggestionsEnabled)
+        defaults.set(preferences.aiSuggestFilenames, forKey: Keys.aiSuggestFilenames)
+        defaults.set(preferences.aiSuggestTags, forKey: Keys.aiSuggestTags)
+        defaults.set(preferences.aiUseLocalRules, forKey: Keys.aiUseLocalRules)
+        defaults.set(preferences.aiProvider.rawValue, forKey: Keys.aiProvider)
+        defaults.set(preferences.googleAIStudioModel.rawValue, forKey: Keys.googleAIStudioModel)
+        defaults.set(preferences.aiVisionEnabled, forKey: Keys.aiVisionEnabled)
+        defaults.set(preferences.aiVisionOnlyWhenOCREmpty, forKey: Keys.aiVisionOnlyWhenOCREmpty)
     }
 
     private func bool(_ key: String, _ fallback: Bool) -> Bool {
@@ -131,5 +151,13 @@ final class SettingsService {
         static let ocrLanguagePreset = "ScreenshotInbox.ocrLanguagePreset"
         static let ocrPreferredLanguages = "ScreenshotInbox.ocrPreferredLanguages"
         static let showDebugControls = "ScreenshotInbox.debug.showDebugControls"
+        static let aiInlineSuggestionsEnabled = "ScreenshotInbox.ai.inlineSuggestionsEnabled"
+        static let aiSuggestFilenames = "ScreenshotInbox.ai.suggestFilenames"
+        static let aiSuggestTags = "ScreenshotInbox.ai.suggestTags"
+        static let aiUseLocalRules = "ScreenshotInbox.ai.useLocalRules"
+        static let aiProvider = "ScreenshotInbox.ai.provider"
+        static let googleAIStudioModel = "ScreenshotInbox.ai.googleStudioModel"
+        static let aiVisionEnabled = "ScreenshotInbox.ai.visionEnabled"
+        static let aiVisionOnlyWhenOCREmpty = "ScreenshotInbox.ai.visionOnlyWhenOCREmpty"
     }
 }

@@ -20,7 +20,6 @@ struct ScreenshotGridContainer: View {
     var body: some View {
         let selectedCount = appState.selectedScreenshotIDs.count
         let isBatchBarVisible = selectedCount > 1
-        let _ = Self.logBatchBarEvaluation(count: selectedCount, visible: isBatchBarVisible)
         VStack(spacing: 0) {
             FilterBarView()
             Divider().opacity(0.4)
@@ -41,15 +40,12 @@ struct ScreenshotGridContainer: View {
                 },
                 onDoubleClick: handleDoubleClick,
                 onBackgroundClick: {
-                    print("[GridContainer] background click — clear")
                     appState.clearScreenshotSelection()
                 },
                 onSelectAll: {
-                    print("[GridContainer] selectAll received; instance=\(ObjectIdentifier(appState))")
                     appState.selectAllVisibleScreenshots()
                 },
                 onClear: {
-                    print("[GridContainer] clearSelection received; instance=\(ObjectIdentifier(appState))")
                     appState.clearScreenshotSelection()
                 },
                 onItemMenu: { id in
@@ -111,17 +107,6 @@ struct ScreenshotGridContainer: View {
         .onChange(of: appState.activeFilterChip) { appState.pruneSelectionToVisible() }
         .onChange(of: appState.searchQuery) { appState.pruneSelectionToVisible() }
         .onChange(of: appState.sidebarSelection) { appState.pruneSelectionToVisible() }
-        .onChange(of: selectedCount) { _, newValue in
-            print("[BatchBarDebug] selectedIDs count = \(newValue)")
-            print("[BatchBarDebug] visible = \(newValue > 1)")
-            print("[BatchBarDebug] source = appState.selectedScreenshotIDs")
-        }
-    }
-
-    private static func logBatchBarEvaluation(count: Int, visible: Bool) {
-        print("[BatchBarDebug] selectedIDs count = \(count)")
-        print("[BatchBarDebug] visible = \(visible)")
-        print("[BatchBarDebug] source = appState.selectedScreenshotIDs")
     }
 
     private func ensureMenuController() -> ContextMenuController {
@@ -146,9 +131,7 @@ struct ScreenshotGridContainer: View {
     }
 
     private func handleEscape() {
-        print("[GridContainer] handleEscape; firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
         if AppKitFocusHelper.isTextInputFocused() {
-            print("[GridContainer] forwarding cancelOperation to text input")
             NSApp.sendAction(#selector(NSResponder.cancelOperation(_:)), to: nil, from: nil)
             return
         }

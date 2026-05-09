@@ -28,10 +28,8 @@ final class SelectionController: ObservableObject {
 
     /// Programmatic clear (Escape, sidebar/filter reset).
     func clear() {
-        print("[Selection] clear")
         selectedIDs = []
         anchorID = nil
-        print("[Selection] selected IDs now:", selectedIDs)
     }
 
     /// Command-click toggle. Always re-anchors on the clicked item so
@@ -68,18 +66,15 @@ final class SelectionController: ObservableObject {
 
     /// Cmd-A. Selects every item currently visible in the grid.
     func selectAll(in orderedIDs: [UUID]) {
-        print("[Selection] selectAll count:", orderedIDs.count)
         guard !orderedIDs.isEmpty else { return }
         selectedIDs = Set(orderedIDs)
         if anchorID == nil { anchorID = orderedIDs.first }
-        print("[Selection] selected IDs now:", selectedIDs)
     }
 
     /// Full selection snapshot from AppKit-native selection paths.
     /// Replaces the canonical set instead of applying incremental deltas so
     /// SwiftUI always sees the same truth as NSCollectionView.
     func setSelectedIDs(_ ids: Set<UUID>, source: String) {
-        print("[SelectionDebug] SelectionController setSelectedIDs source=\(source) count = \(ids.count)")
         selectedIDs = ids
         if let anchor = anchorID, !ids.contains(anchor) {
             anchorID = ids.first

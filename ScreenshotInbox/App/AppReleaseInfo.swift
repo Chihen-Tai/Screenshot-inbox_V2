@@ -10,7 +10,9 @@ enum AppReleaseInfo {
     static let license = "MIT"
     static let shortDescription = "A local-first macOS screenshot organizer."
     static let privacyNote = "Local-first. No account required."
-    static let repositoryPlaceholder = "https://github.com/<your-username>/ScreenshotInbox"
+    static let repositoryURL = "https://github.com/Chihen-Tai/Screenshot-inbox_V2"
+    static let repositoryIssuesURL = "https://github.com/Chihen-Tai/Screenshot-inbox_V2/issues"
+    static let repositoryPlaceholder = repositoryURL
 }
 
 enum FirstRunOnboarding {

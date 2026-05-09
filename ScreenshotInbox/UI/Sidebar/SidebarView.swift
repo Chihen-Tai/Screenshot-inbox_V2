@@ -52,7 +52,6 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             Divider().opacity(0.35)
             Button {
-                print("[Settings] Settings clicked from sidebar")
                 AppWindowRouter.shared.openSettings()
             } label: {
                 SidebarItemView(
@@ -112,9 +111,6 @@ struct SidebarView: View {
         )
 
         Button {
-            #if DEBUG
-            print("[Sidebar] left click collection uuid=\(collection.uuid) name=\(collection.name)")
-            #endif
             appState.sidebarSelection = selection
         } label: {
             SidebarItemView(
@@ -146,11 +142,6 @@ struct SidebarView: View {
             )
         )
         .onDrag {
-            #if DEBUG
-            print("[CollectionReorder] drag begin uuid=\(collection.uuid) name=\(collection.name)")
-            print("[CollectionReorder] writing pasteboard type: \(InternalCollectionDrag.pasteboardTypeString)")
-            print("[CollectionReorder] payload uuid=\(collection.uuid)")
-            #endif
             let provider = NSItemProvider(
                 item: InternalCollectionDrag.encode(collection.uuid).data(using: .utf8) as NSData?,
                 typeIdentifier: InternalCollectionDrag.pasteboardTypeString
@@ -160,10 +151,6 @@ struct SidebarView: View {
                 forTypeIdentifier: InternalCollectionDrag.pasteboardTypeString,
                 visibility: .ownProcess
             ) { completion in
-                #if DEBUG
-                print("[CollectionReorder] writing pasteboard type: \(InternalCollectionDrag.pasteboardTypeString)")
-                print("[CollectionReorder] payload uuid=\(collection.uuid)")
-                #endif
                 completion(InternalCollectionDrag.encode(collection.uuid).data(using: .utf8), nil)
                 return nil
             }
@@ -171,15 +158,9 @@ struct SidebarView: View {
         }
         .contextMenu {
             Button("Rename Collection") {
-                #if DEBUG
-                print("[Sidebar] right click collection uuid=\(collection.uuid) name=\(collection.name) action=rename")
-                #endif
                 appState.beginRenameCollection(collection)
             }
             Button("Delete Collection", role: .destructive) {
-                #if DEBUG
-                print("[Sidebar] right click collection uuid=\(collection.uuid) name=\(collection.name) action=delete")
-                #endif
                 appState.beginDeleteCollection(collection)
             }
             Divider()
@@ -193,9 +174,6 @@ struct SidebarView: View {
             .disabled(!appState.canMoveCollectionDown(collection))
             Divider()
             Button("Add Selected Screenshots to Collection") {
-                #if DEBUG
-                print("[Sidebar] right click collection uuid=\(collection.uuid) name=\(collection.name) action=add-selected")
-                #endif
                 appState.addScreenshots(ids: Array(appState.selectedScreenshotIDs), toCollection: collection.uuid)
             }
             .disabled(appState.selectedScreenshotIDs.isEmpty)
@@ -251,9 +229,6 @@ struct SidebarView: View {
         targetUUID: String,
         position: SidebarCollectionDropPosition
     ) {
-        #if DEBUG
-        print("[SidebarDrop] payload type collection ID source=\(sourceUUID) target=\(targetUUID)")
-        #endif
         appState.commitCollectionReorder(sourceUUID: sourceUUID, targetUUID: targetUUID, position: position)
     }
 
@@ -272,19 +247,12 @@ struct SidebarView: View {
 
     private func handleInternalScreenshotDrop(_ ids: [UUID], on selection: SidebarSelection) {
         guard acceptsInternalScreenshotDrop(selection), !ids.isEmpty else { return }
-        print("[SidebarDrop] drop received IDs: \(ids.map(\.uuidString))")
-        #if DEBUG
-        print("[SidebarDrop] payload type screenshot IDs")
-        #endif
         switch selection {
         case .favorites:
-            print("[SidebarDrop] action called: favorite")
             appState.router.addDraggedScreenshotsToFavorites(ids: ids)
         case .trash:
-            print("[SidebarDrop] action called: trash")
             appState.router.moveDraggedScreenshotsToTrash(ids: ids)
         case .collection(let uuid):
-            print("[SidebarDrop] action called: collection \(uuid)")
             appState.router.addDraggedScreenshots(ids: ids, toCollection: uuid)
         default:
             break

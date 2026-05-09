@@ -131,7 +131,6 @@ struct FloatingPreviewSettingsView: View {
         Binding(
             get: { appState.screenshotInboxPreferences[keyPath: keyPath] },
             set: { value in
-                print(log(value))
                 var prefs = appState.screenshotInboxPreferences
                 prefs[keyPath: keyPath] = value
                 appState.screenshotInboxPreferences = prefs

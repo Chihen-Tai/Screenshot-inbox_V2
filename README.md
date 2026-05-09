@@ -164,6 +164,17 @@ Do not upload private screenshots or API keys in public issues.
 
 Screenshot Inbox is in active pre-release development. Core local-library, import, organization, OCR, QR detection, search, PDF export, trash, and maintenance workflows exist, but the project still needs broader manual QA and public issue triage before a stable release.
 
+## Known Alpha Limitations
+
+- The Swift Package Manager executable may appear as `ScreenshotInbox` in the Dock even though app menus and packaged metadata use `Screenshot Inbox`.
+- Floating-preview inbox state is not persisted across relaunches.
+- Signing and notarization are not yet finalized for public distribution.
+- AI suggestions are optional and fall back to local rules when no provider key is configured.
+
+## Reporting Bugs
+
+Please include the macOS version, how the app was launched (`swift run` or packaged app), the screenshot source folder, steps to reproduce, and any console lines for import failures, duplicate imports, missing files, OCR failures, PDF export failures, or AI provider failures.
+
 ## Roadmap
 
 See `ROADMAP.md`.

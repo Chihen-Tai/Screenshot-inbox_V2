@@ -67,6 +67,32 @@ struct QuickFilterPreference: Hashable, Identifiable {
     var id: FilterChip { chip }
 }
 
+enum AIProvider: String, CaseIterable, Hashable {
+    case localRules
+    case googleAIStudioGemma
+
+    var title: String {
+        switch self {
+        case .localRules: return "Local Rules"
+        case .googleAIStudioGemma: return "Google AI Studio"
+        }
+    }
+}
+
+enum GoogleAIStudioModel: String, CaseIterable, Hashable {
+    case gemini25FlashLite = "gemini-2.5-flash-lite"
+    case gemma4_26b = "gemma-4-26b-a4b-it"
+    case gemma4_31b = "gemma-4-31b-it"
+
+    var title: String {
+        switch self {
+        case .gemini25FlashLite: return "gemini-2.5-flash-lite (default)"
+        case .gemma4_26b: return "gemma-4-26b-a4b-it"
+        case .gemma4_31b: return "gemma-4-31b-it"
+        }
+    }
+}
+
 struct AppPreferences: Hashable {
     var autoImportEnabled: Bool
     var defaultWatchedFoldersInitialized: Bool
@@ -89,6 +115,14 @@ struct AppPreferences: Hashable {
     var ocrLanguagePreset: OCRLanguagePreset
     var ocrPreferredLanguages: [String]
     var showDebugControls: Bool
+    var aiInlineSuggestionsEnabled: Bool
+    var aiSuggestFilenames: Bool
+    var aiSuggestTags: Bool
+    var aiUseLocalRules: Bool
+    var aiProvider: AIProvider
+    var googleAIStudioModel: GoogleAIStudioModel
+    var aiVisionEnabled: Bool
+    var aiVisionOnlyWhenOCREmpty: Bool
 
     static let defaultQuickFilters: [QuickFilterPreference] = [
         QuickFilterPreference(chip: .all, isEnabled: true),
@@ -127,6 +161,14 @@ struct AppPreferences: Hashable {
         preferredAppearance: .system,
         ocrLanguagePreset: .chineseEnglish,
         ocrPreferredLanguages: ["zh-Hant", "zh-Hans", "en-US"],
-        showDebugControls: false
+        showDebugControls: false,
+        aiInlineSuggestionsEnabled: true,
+        aiSuggestFilenames: true,
+        aiSuggestTags: true,
+        aiUseLocalRules: true,
+        aiProvider: .localRules,
+        googleAIStudioModel: .gemini25FlashLite,
+        aiVisionEnabled: false,
+        aiVisionOnlyWhenOCREmpty: false
     )
 }

@@ -60,14 +60,12 @@ final class AutoImportService {
                     return (source.uuid, lastScannedAt)
                 }
             )
-            debugLog("loaded sources: \(sources.map(\.folderPath))")
             fileWatcher.replaceWatchedSources(sources) { [weak self] source, urls in
                 Task { @MainActor in
                     self?.handleDetectedURLs(urls, from: source)
                     self?.onSourceFolderChanged?(source)
                 }
             }
-            debugLog("watching \(sources.count) source(s)")
         } catch {
             print("[AutoImport] reload failed: \(error)")
             fileWatcher.stopAll()
@@ -102,7 +100,6 @@ final class AutoImportService {
         guard !filtered.isEmpty else { return }
         for url in filtered {
             let key = url.standardizedFileURL.path
-            debugLog("detected file: \(key)")
             pendingTasks[key]?.cancel()
             pendingTasks[key] = Task { [weak self] in
                 await self?.debounceAndImport(url: url, source: source)
@@ -126,7 +123,6 @@ final class AutoImportService {
             return
         }
 
-        debugLog("importing file: \(url.path)")
         let inboxOutcome = ScreenshotInboxStore.shared.importScreenshotIfNeeded(url: url, source: .autoImport)
         guard inboxOutcome.wasInserted else {
             markSourceScanned(source)
@@ -152,9 +148,8 @@ final class AutoImportService {
         markSourceScanned(source)
         pendingTasks.removeValue(forKey: key)
         if result.imported.isEmpty && result.duplicates > 0 && result.failures.isEmpty {
-            debugLog("skipped duplicate: \(url.lastPathComponent)")
+            print("[Import] duplicate ignored url = \(url.path)")
         }
-        debugLog("imported count: \(result.imported.count)")
         if let onResult {
             await MainActor.run {
                 onResult(AutoImportResult(
@@ -176,15 +171,12 @@ final class AutoImportService {
         let standardized = url.standardizedFileURL
         let name = standardized.lastPathComponent
         guard !name.hasPrefix(".") else {
-            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
             return false
         }
         guard !name.hasSuffix(".tmp"), !name.hasSuffix(".download") else {
-            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
             return false
         }
         guard !isLibraryOrInsideLibrary(standardized) else {
-            if shouldLog { debugLog("ignored library file: \(standardized.path)") }
             return false
         }
         var isDirectory: ObjCBool = false
@@ -193,7 +185,6 @@ final class AutoImportService {
         }
         guard !requireEnabledSince || isNewEnough(standardized, source: source) else { return false }
         guard AutoImportService.isSupportedImageURL(standardized) else {
-            if shouldLog { debugLog("ignored unsupported file: \(standardized.path)") }
             return false
         }
         return true
@@ -251,11 +242,7 @@ final class AutoImportService {
         }
     }
 
-    private func debugLog(_ message: String) {
-        #if DEBUG
-        print("[AutoImport] \(message)")
-        #endif
-    }
+    private func debugLog(_ message: String) {}
 }
 
 private final class NullFileWatcherService: FileWatcherService {

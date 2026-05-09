@@ -12,25 +12,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func show(appState: AppState) {
         QuickLookPreviewController.shared.close()
         if let existingWindow = window {
-            print("[Settings] reusing existing Settings window")
             NSApp.setActivationPolicy(.regular)
             NSApp.unhide(nil)
             NSApp.activate(ignoringOtherApps: true)
             existingWindow.deminiaturize(nil)
             existingWindow.makeKeyAndOrderFront(nil)
             existingWindow.orderFrontRegardless()
-            print("[Settings] Settings window shown")
             return
         }
 
-        print("[Settings] creating Settings window size = 680x640")
         let rootView = SettingsView()
             .environmentObject(appState)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
 
         let hostingController = NSHostingController(rootView: rootView)
-        print("[Settings] SettingsView loaded")
 
         let newWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 680, height: 640),
@@ -43,7 +39,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         newWindow.backgroundColor = .windowBackgroundColor
         newWindow.minSize = NSSize(width: 620, height: 520)
         newWindow.contentViewController = hostingController
-        print("[Settings] contentViewController assigned")
         newWindow.setContentSize(NSSize(width: 680, height: 640))
         newWindow.center()
         newWindow.isReleasedWhenClosed = false
@@ -55,7 +50,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         newWindow.makeKeyAndOrderFront(nil)
         newWindow.orderFrontRegardless()
-        print("[Settings] Settings window shown")
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

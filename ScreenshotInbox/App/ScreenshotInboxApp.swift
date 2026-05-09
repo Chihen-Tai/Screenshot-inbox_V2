@@ -26,7 +26,6 @@ struct ScreenshotInboxApp: App {
             NSApplication.shared.applicationIconImage = appIcon
         }
         NSApplication.shared.activate(ignoringOtherApps: true)
-        print("[App] init; activationPolicy set to .regular and activated")
     }
 
     var body: some Scene {

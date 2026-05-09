@@ -93,6 +93,10 @@ final class AppState: ObservableObject {
     @Published var tagEditorTargetIDs: [UUID] = []
     @Published var pendingTagText: String = ""
     @Published var isTagEditorPresented: Bool = false
+
+    var tagEditorPrimaryScreenshot: Screenshot? {
+        tagEditorTargetIDs.first.flatMap { screenshotsByID[$0] }
+    }
     @Published var collectionPickerTargetIDs: [UUID] = []
     @Published var isCollectionPickerPresented: Bool = false
     @Published var isCollectionRenamePresented: Bool = false
@@ -103,6 +107,8 @@ final class AppState: ObservableObject {
     @Published var isEmptyTrashDeletePending: Bool = false
     /// Currently displayed toast / banner. Auto-clears after a short delay.
     @Published var toast: ToastMessage?
+    @Published var aiVisionCache: [String: String] = [:]
+    @Published var analyzingVisionUUIDs: Set<String> = []
 
     // MARK: - Selection / shortcuts
 
@@ -244,9 +250,6 @@ final class AppState: ObservableObject {
                 displayName: url.lastPathComponent,
                 recursive: false
             )
-            #if DEBUG
-            print("[AutoImport] development default source added: \(path)")
-            #endif
         }
     }
     #endif
@@ -354,9 +357,6 @@ final class AppState: ObservableObject {
             detectedCodeRepository = codesRepo
             imageHashRepository = imageHashesRepo
             organizationRuleRepository = rulesRepo
-            #if DEBUG
-            print("[AppState] persistence ok: rows=\(loaded.count) at \(library.databaseURL.path)")
-            #endif
         } catch {
             print("[AppState] persistence bootstrap failed — falling back to mocks: \(error)")
         }
@@ -483,7 +483,6 @@ final class AppState: ObservableObject {
         if let first = allScreenshots.first {
             controller.replace(with: first.id)
         }
-        print("[AppState] init instance:", ObjectIdentifier(self), "mock=\(isUsingMockData)")
         AppWindowRouter.shared.registerOpenMainInbox { [weak self] source in
             self?.showMainInboxWindow(from: source)
         }
@@ -549,7 +548,6 @@ final class AppState: ObservableObject {
     }
 
     func openSettings() {
-        print("[Settings] openSettings() called")
         SettingsWindowController.shared.show(appState: self)
     }
 
@@ -574,7 +572,6 @@ final class AppState: ObservableObject {
 
     func dismissScreenshotInboxItem(_ item: ScreenshotItem) {
         screenshotInboxStore.dismiss(item)
-        print("[FloatingPreview] dismissed item removed from preview: \(item.url.lastPathComponent)")
         if FloatingInboxPanelController.shared.isVisible {
             showFloatingInbox(reason: .menuBarRequested)
         }
@@ -615,7 +612,6 @@ final class AppState: ObservableObject {
         }
 
         let allNewItems = screenshotInboxStore.newItems
-        print("[FloatingPreview] count updated = \(screenshotInboxStore.newUndismissedCount)")
         let maxItems = max(1, screenshotInboxPreferences.maxFloatingPreviewItems)
         let items = screenshotInboxPreferences.showMultipleScreenshotsInFloatingPreview
             ? Array(allNewItems.prefix(maxItems))
@@ -658,14 +654,12 @@ final class AppState: ObservableObject {
             if let canonical = result.imported.first {
                 // New import succeeded — link the floating item to the canonical row.
                 self.screenshotInboxStore.updateCanonicalID(for: url, id: canonical.id)
-                print("[Import] capture succeeded name=\(canonical.name) id=\(canonical.id)")
             } else if let replaced = result.replaced.first {
                 // Replaced an existing duplicate — link to the updated row.
                 self.screenshotInboxStore.updateCanonicalID(for: url, id: replaced.id)
-                print("[Import] capture replaced existing id=\(replaced.id)")
             } else if result.duplicates > 0 {
                 // Already in the library; floating item stays visible but has no canonical link.
-                print("[Import] capture already in library (duplicate), floating item kept")
+                print("[Import] duplicate ignored url = \(url.path)")
             } else if !result.failures.isEmpty {
                 // Import failed — remove the floating item so it doesn't stay as a ghost.
                 print("[Import] capture failed, removing floating item: \(url.lastPathComponent)")
@@ -698,17 +692,10 @@ final class AppState: ObservableObject {
 
         if !screenshotInboxPreferences.floatingPreviewEnabled {
             FloatingInboxPanelController.shared.hide()
-            print("[Settings] floatingPreviewEnabled changed to false — panel hidden")
         } else if oldValue.floatingPreviewEnabled != screenshotInboxPreferences.floatingPreviewEnabled ||
                     oldValue.floatingPreviewAutoShowEnabled != screenshotInboxPreferences.floatingPreviewAutoShowEnabled ||
                     oldValue.showMultipleScreenshotsInFloatingPreview != screenshotInboxPreferences.showMultipleScreenshotsInFloatingPreview ||
                     oldValue.maxFloatingPreviewItems != screenshotInboxPreferences.maxFloatingPreviewItems {
-            if oldValue.floatingPreviewEnabled != screenshotInboxPreferences.floatingPreviewEnabled {
-                print("[Settings] floatingPreviewEnabled changed to \(screenshotInboxPreferences.floatingPreviewEnabled)")
-            }
-            if oldValue.floatingPreviewAutoShowEnabled != screenshotInboxPreferences.floatingPreviewAutoShowEnabled {
-                print("[Settings] floatingPreviewAutoShowEnabled changed to \(screenshotInboxPreferences.floatingPreviewAutoShowEnabled)")
-            }
             showFloatingInbox(reason: .menuBarRequested)
         }
 
@@ -775,29 +762,6 @@ final class AppState: ObservableObject {
     }
 
     private func logSourceSyncPreferenceChanges(oldValue: AppPreferences) {
-        #if DEBUG
-        if oldValue.syncRenameOriginalSourceFiles != preferences.syncRenameOriginalSourceFiles {
-            print("[SourceSync] syncRenameOriginalSourceFiles=\(preferences.syncRenameOriginalSourceFiles)")
-        }
-        if oldValue.syncMoveOriginalToTrashOnAppTrash != preferences.syncMoveOriginalToTrashOnAppTrash {
-            print("[SourceSync] syncMoveOriginalToTrashOnAppTrash=\(preferences.syncMoveOriginalToTrashOnAppTrash)")
-        }
-        if oldValue.syncMoveOriginalToTrashOnPermanentDelete != preferences.syncMoveOriginalToTrashOnPermanentDelete {
-            print("[SourceSync] syncMoveOriginalToTrashOnPermanentDelete=\(preferences.syncMoveOriginalToTrashOnPermanentDelete)")
-        }
-        if oldValue.syncTrashInboxItemWhenOriginalDeleted != preferences.syncTrashInboxItemWhenOriginalDeleted {
-            print("[SourceSync] syncTrashInboxItemWhenOriginalDeleted=\(preferences.syncTrashInboxItemWhenOriginalDeleted)")
-        }
-        if oldValue.syncRenameInboxItemWhenOriginalRenamed != preferences.syncRenameInboxItemWhenOriginalRenamed {
-            print("[SourceSync] syncRenameInboxItemWhenOriginalRenamed=\(preferences.syncRenameInboxItemWhenOriginalRenamed)")
-        }
-        if oldValue.copyNewImportsToDefaultSourceFolder != preferences.copyNewImportsToDefaultSourceFolder {
-            print("[SourceSync] copyNewImportsToDefaultSourceFolder=\(preferences.copyNewImportsToDefaultSourceFolder)")
-        }
-        if oldValue.defaultSourceFolderPath != preferences.defaultSourceFolderPath {
-            print("[SourceSync] defaultSourceFolderPath=\(preferences.defaultSourceFolderPath)")
-        }
-        #endif
     }
 
     // MARK: - Filtering
@@ -1188,18 +1152,11 @@ final class AppState: ObservableObject {
         let currentOrder = collections.map(\.uuid)
         let finalOrder = reordered.map(\.uuid)
         guard currentOrder != finalOrder else { return false }
-        #if DEBUG
-        print("[CollectionReorder] hover from index=\(sourceIndex) to index=\(insertIndex)")
-        #endif
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             collections = reordered
         }
-        #if DEBUG
-        print("[CollectionReorder] local order updated")
-        print("[CollectionReorder] local order: \(finalOrder)")
-        #endif
         return true
     }
 
@@ -1211,9 +1168,6 @@ final class AppState: ObservableObject {
         let finalOrder = reordered.map(\.uuid)
         guard !finalOrder.isEmpty else { return }
         do {
-            #if DEBUG
-            print("[CollectionReorder] commit order: \(finalOrder)")
-            #endif
             try collectionRepository.updateSortOrder(collectionUUIDsInOrder: finalOrder)
             var transaction = Transaction()
             transaction.disablesAnimations = true
@@ -1225,14 +1179,8 @@ final class AppState: ObservableObject {
                     return updated
                 }
             }
-            #if DEBUG
-            print("[CollectionReorder] saved sort_index")
-            #endif
             if reloadSidebar {
                 collections = try collectionRepository.fetchCollections()
-                #if DEBUG
-                print("[CollectionReorder] reload sidebar")
-                #endif
             }
             objectWillChange.send()
         } catch {
@@ -1381,7 +1329,6 @@ final class AppState: ObservableObject {
             }
             objectWillChange.send()
             if pruneSelection { pruneSelectionToVisible() }
-            print("[AppState] organization refresh collections=\(collections.count)")
         } catch {
             print("[AppState] organization refresh failed: \(error)")
         }
@@ -1551,8 +1498,6 @@ final class AppState: ObservableObject {
                     self.refreshDuplicateGroups()
                     if manual {
                         self.showToast(Self.ruleRunSummary(result), kind: .success)
-                    } else if result.tagsAdded > 0 || result.collectionMembershipsAdded > 0 || result.favoritesChanged > 0 {
-                        print("[Rules] auto applied screenshots=\(result.screenshotsChanged) tags=\(result.tagsAdded) collections=\(result.collectionMembershipsAdded) favorites=\(result.favoritesChanged)")
                     }
                 }
             } catch {
@@ -2029,11 +1974,6 @@ final class AppState: ObservableObject {
 
     private func validateMissingOriginalSources(in sourceFolders: [URL], showNoChanges: Bool) {
         guard isExternalSourceSyncEnabled else { return }
-        #if DEBUG
-        print("[SourceSync] checking external source files")
-        print("[SourceSync] external deletion sync enabled=\(preferences.syncTrashInboxItemWhenOriginalDeleted)")
-        print("[SourceSync] external rename sync enabled=\(preferences.syncRenameInboxItemWhenOriginalRenamed)")
-        #endif
         let changes: SourceFolderSyncChanges
         do {
             changes = try sourceFolderSyncService.reconcileOriginalSourceChanges(
@@ -2086,10 +2026,6 @@ final class AppState: ObservableObject {
         if !realIDs.isEmpty {
             do {
                 try repository.markTrashed(ids: realIDs, trashed: true)
-                print("[SourceSync] moved missing originals to app trash ids=\(realIDs.map(\.uuidString))")
-                for id in realIDs {
-                    print("[SourceSync] moved app item to Trash because original missing uuid=\(id.uuidString.lowercased())")
-                }
             } catch {
                 print("[SourceSync] app trash persist failed: \(error)")
             }
@@ -2098,7 +2034,6 @@ final class AppState: ObservableObject {
         refreshOrganizationState(pruneSelection: false)
         refreshDuplicateGroups()
         pruneSelectionToVisible()
-        print("[SourceSync] refresh counts inbox=\(inboxCount) favorites=\(favoriteCount) trash=\(trashCount)")
         return targets.count
     }
 
@@ -2106,7 +2041,6 @@ final class AppState: ObservableObject {
         guard !renames.isEmpty else { return }
         for rename in renames {
             var updated = screenshotsByID[rename.screenshot.id] ?? rename.screenshot
-            print("[SourceSync] external source rename uuid=\(updated.uuidString) old=\(rename.oldOriginalURL.path) new=\(rename.newOriginalURL.path)")
             updated.originalPath = rename.newOriginalURL.path
             updated.sourceApp = rename.newOriginalURL.deletingLastPathComponent().path
             updated.name = rename.newOriginalURL.lastPathComponent
@@ -2114,7 +2048,6 @@ final class AppState: ObservableObject {
             do {
                 try repository.update(updated)
                 screenshotsByID[updated.id] = updated
-                print("[SourceSync] external rename reconciled uuid=\(updated.uuidString)")
             } catch {
                 print("[SourceSync] external rename reconcile failed uuid=\(updated.uuidString) error=\(error)")
             }
@@ -2154,13 +2087,8 @@ final class AppState: ObservableObject {
         linkOrRemoveFloatingItem(for: result.importResult, sourceURL: result.sourceURL)
         if result.inboxOutcome.wasInserted {
             showFloatingInbox(reason: .screenshotCaptured)
-        } else if result.inboxOutcome.ignoredReason == .duplicate {
-            print("[AutoImport] duplicate result did not reopen floating preview")
         }
         refreshImportSources(reloadWatchers: false)
-        #if DEBUG
-        print("[AutoImport] refresh complete")
-        #endif
         let imported = result.importResult.imported.count
         if let notice = takeSourceSyncNotice() {
             showToast(notice, kind: sourceSyncToastKind(for: notice))
@@ -2212,15 +2140,12 @@ final class AppState: ObservableObject {
     /// Cmd-A from anywhere — single entry point for "select all visible".
     func selectAllVisibleScreenshots() {
         let ids = filteredScreenshots.map(\.id)
-        print("[AppState] selectAllVisibleScreenshots; visible=\(ids.count); instance=\(ObjectIdentifier(self))")
         selection.selectAll(in: ids)
-        print("[SelectionDebug] Cmd+A selected IDs count = \(selection.selectedIDs.count)")
         logSelectionChange(source: "cmdA")
     }
 
     /// Plain Escape from anywhere — single entry point for "clear selection".
     func clearScreenshotSelection() {
-        print("[AppState] clearScreenshotSelection; instance=\(ObjectIdentifier(self))")
         clearCutState()
         selection.clear()
         logSelectionChange(source: "clear")
@@ -2247,12 +2172,6 @@ final class AppState: ObservableObject {
     }
 
     private func logSelectionChange(source: String) {
-        #if DEBUG
-        print("[Selection] source=\(source) selectedCount=\(selection.count)")
-        #endif
-        print("[Selection] selected count = \(selection.count)")
-        print("[Selection] primary selected = \(primarySelection?.name ?? "none")")
-        print("[SelectionDebug] AppState selectedIDs count = \(selection.selectedIDs.count)")
         objectWillChange.send()
     }
 
@@ -2279,17 +2198,14 @@ final class AppState: ObservableObject {
     @discardableResult
     func closeOverlayIfPresent() -> Bool {
         if previewedScreenshotID != nil {
-            print("[AppState] closing preview overlay")
             closePreview()
             return true
         }
         if ocrTextViewerScreenshotID != nil {
-            print("[AppState] closing OCR text viewer")
             ocrTextViewerScreenshotID = nil
             return true
         }
         if renamingScreenshotID != nil {
-            print("[AppState] closing rename overlay")
             cancelRename()
             return true
         }
@@ -2317,45 +2233,37 @@ final class AppState: ObservableObject {
     /// Install the window-level keyDown monitor. Called from
     /// `MainWindowView.onAppear`.
     func installShortcuts() {
-        print("[AppState] installShortcuts; instance=\(ObjectIdentifier(self))")
         shortcuts.onSelectAll = { [weak self] in
-            print("[Shortcut→AppState] onSelectAll")
             self?.selectAllVisibleScreenshots()
         }
         shortcuts.onClearSelection = { [weak self] in
-            print("[Shortcut→AppState] onClearSelection")
             self?.handleEscape()
         }
         shortcuts.onTrash = { [weak self] in
             guard let self else { return }
-            print("[Shortcut→AppState] onTrash")
             let shots = self.selectedScreenshots
             guard !shots.isEmpty else { return }
             self.router.handleDeleteKey(shots)
         }
         shortcuts.onPreview = { [weak self] in
             guard let self else { return }
-            print("[Shortcut→AppState] onPreview")
             let shots = self.selectedScreenshots
             self.router.quickLook(shots)
         }
         shortcuts.onCopy = { [weak self] in
             guard let self else { return }
-            print("[Shortcut→AppState] onCopy")
             let shots = self.selectedScreenshots
             guard !shots.isEmpty else { return }
             self.router.copyForCommand(shots)
         }
         shortcuts.onReveal = { [weak self] in
             guard let self else { return }
-            print("[Shortcut→AppState] onReveal")
             let shots = self.selectedScreenshots
             guard !shots.isEmpty else { return }
             self.router.revealInFinder(shots)
         }
         shortcuts.onOpen = { [weak self] in
             guard let self else { return }
-            print("[Shortcut→AppState] onOpen")
             let shots = self.selectedScreenshots
             guard !shots.isEmpty else { return }
             self.router.open(shots)
@@ -2372,7 +2280,6 @@ final class AppState: ObservableObject {
         }
         shortcuts.onRename = { [weak self] in
             guard let self else { return }
-            print("[Shortcut→AppState] onRename")
             guard let shot = self.primarySelection else { return }
             self.router.rename(shot)
         }
@@ -2401,7 +2308,6 @@ final class AppState: ObservableObject {
         if !realIDs.isEmpty {
             do {
                 try repository.markTrashed(ids: realIDs, trashed: true)
-                print("[Repository] moveToTrash success ids=\(realIDs.map(\.uuidString))")
             } catch {
                 print("[AppState] trash persist failed: \(error)")
             }
@@ -2411,7 +2317,6 @@ final class AppState: ObservableObject {
         refreshDuplicateGroups()
         pruneSelectionToVisible()
         screenshotInboxStore.dismissCanonicalItems(ids: Set(targets.map(\.id)))
-        print("[AppState] refresh counts inbox=\(inboxCount) favorites=\(favoriteCount) trash=\(trashCount)")
         if preferences.syncMoveOriginalToTrashOnAppTrash {
             let result = moveOriginalSourcesToMacTrash(targets)
             showToast(sourceTrashMessage(prefix: "Moved screenshot to Trash", result: result), kind: result.failures > 0 ? .info : .success)
@@ -2564,10 +2469,6 @@ final class AppState: ObservableObject {
                 : library.libraryRootURL.appendingPathComponent(libraryPath)
             if isManagedLibraryURL(originalURL) {
                 urls.append(originalURL)
-            } else {
-                #if DEBUG
-                print("[AppState] skip deleting non-library original path=\(originalURL.path)")
-                #endif
             }
         }
         for url in urls {
@@ -2690,14 +2591,12 @@ final class AppState: ObservableObject {
         if !realIDs.isEmpty {
             do {
                 try repository.updateFavorite(ids: realIDs, isFavorite: isFavorite)
-                print("[Repository] updateFavorite success favorite=\(isFavorite) ids=\(realIDs.map(\.uuidString))")
             } catch {
                 print("[AppState] favorite persist failed: \(error)")
             }
         }
         objectWillChange.send()
         pruneSelectionToVisible()
-        print("[AppState] refresh counts inbox=\(inboxCount) favorites=\(favoriteCount) trash=\(trashCount)")
         if !isPerformingUndo, !previous.isEmpty {
             registerUndo(title: isFavorite ? "Favorite" : "Unfavorite") { [weak self] in
                 self?.restoreFavoriteStates(previous)
@@ -2739,6 +2638,21 @@ final class AppState: ObservableObject {
             selectImported: true,
             inboxSource: .dragDrop
         )
+    }
+
+    /// Opens a modal NSOpenPanel so the user can pick screenshots from any
+    /// location. Wired to the "Import Screenshots…" menu command.
+    func importFromMenuBar() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif, .bmp]
+        panel.prompt = "Import"
+        panel.message = "Select screenshots to add to your library"
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        let urls = panel.urls
+        Task { await importURLs(urls) }
     }
 
     private func importURLs(
@@ -3144,8 +3058,6 @@ final class AppState: ObservableObject {
         var result = SourceTrashResult()
         let fileManager = FileManager.default
         for screenshot in screenshots {
-            print("[SourceSync] app trash uuid=\(screenshot.uuidString)")
-            print("[SourceSync] source trash enabled=true")
             guard let originalURL = originalSourceURL(for: screenshot) else {
                 print("[SourceSync] source trash failed: no original source path")
                 result.unavailable += 1
@@ -3157,10 +3069,7 @@ final class AppState: ObservableObject {
                 continue
             }
             do {
-                var trashedURL: NSURL?
-                print("[SourceSync] moving source to macOS Trash path=\(originalURL.path)")
-                try fileManager.trashItem(at: originalURL, resultingItemURL: &trashedURL)
-                print("[SourceSync] source trash succeeded resultingURL=\(trashedURL?.path ?? "nil")")
+                try fileManager.trashItem(at: originalURL, resultingItemURL: nil)
                 result.moved += 1
             } catch {
                 print("[SourceSync] trash original failed path=\(originalURL.path) error=\(error)")
@@ -3308,17 +3217,10 @@ final class AppState: ObservableObject {
             screenshots: allScreenshots,
             imageHashes: imageHashesByScreenshotUUID
         )
-        #if DEBUG
-        print("[Duplicates] groups=\(duplicateGroups.count) duplicateItems=\(duplicatesCount)")
-        #endif
     }
 
     func printDuplicateGroups() {
         refreshDuplicateGroups()
-        if duplicateGroups.isEmpty {
-            print("[Duplicates] no groups")
-            return
-        }
         for group in duplicateGroups {
             print("[Duplicates] \(group.kind.rawValue) count=\(group.screenshotUUIDs.count) keep=\(group.recommendedKeepUUID ?? "nil") ids=\(group.screenshotUUIDs)")
         }
@@ -3383,9 +3285,6 @@ final class AppState: ObservableObject {
                 }
                 self.refreshDuplicateGroups()
                 self.maintenanceStatusText = "Duplicate index rebuilt."
-                #if DEBUG
-                print("[Duplicates] hash rebuild complete records=\(completedRecords.count)")
-                #endif
             }
         }
     }
@@ -3800,21 +3699,10 @@ final class AppState: ObservableObject {
         let trimmed = pendingRenameText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, var updated = screenshotsByID[id] else { return }
         let previous = updated
-        #if DEBUG
-        print("[Rename] requested uuid=\(id.uuidString.lowercased()) newName=\(trimmed)")
-        print("[SourceSync] rename app item uuid=\(id.uuidString.lowercased())")
-        #endif
         do {
             if updated.libraryPath != nil {
                 let oldLibraryPath = updated.libraryPath
-                let oldManagedPath = oldLibraryPath.map { library.libraryRootURL.appendingPathComponent($0).path }
                 updated = try renamedManagedCopy(updated, requestedName: trimmed)
-                #if DEBUG
-                if let oldManagedPath {
-                    let newManagedPath = updated.libraryPath.map { library.libraryRootURL.appendingPathComponent($0).path } ?? "nil"
-                    print("[SourceSync] managed rename old=\(oldManagedPath) new=\(newManagedPath)")
-                }
-                #endif
                 syncOriginalRenameIfNeeded(&updated, requestedName: trimmed)
                 do {
                     try repository.update(updated)
@@ -3822,9 +3710,6 @@ final class AppState: ObservableObject {
                     rollbackManagedRenameIfNeeded(from: updated.libraryPath, to: oldLibraryPath)
                     throw error
                 }
-                #if DEBUG
-                print("[Rename] repository updated")
-                #endif
             } else {
                 updated.name = trimmed
                 updated.modifiedAt = Date()
@@ -3836,10 +3721,6 @@ final class AppState: ObservableObject {
                     self?.restoreRenamedScreenshot(previous)
                 }
             }
-            #if DEBUG
-            print("[Rename] AppState updated")
-            print("[Rename] inspector selected filename=\(primarySelection?.name ?? "nil")")
-            #endif
             if let notice = takeSourceSyncNotice() {
                 showToast(notice, kind: sourceSyncToastKind(for: notice))
             } else {
@@ -3880,9 +3761,6 @@ final class AppState: ObservableObject {
     }
 
     private func syncOriginalRenameIfNeeded(_ shot: inout Screenshot, requestedName: String) {
-        #if DEBUG
-        print("[SourceSync] source rename enabled=\(preferences.syncRenameOriginalSourceFiles)")
-        #endif
         guard preferences.syncRenameOriginalSourceFiles else { return }
         let fileManager = FileManager.default
         guard let originalURL = originalSourceURL(for: shot) else {
@@ -3904,10 +3782,8 @@ final class AppState: ObservableObject {
         let targetURL = originalURL
             .deletingLastPathComponent()
             .appendingPathComponent(ext.isEmpty ? baseName : "\(baseName).\(ext)")
-        print("[SourceSync] source rename old=\(originalURL.path) new=\(targetURL.path)")
         guard targetURL != originalURL else {
             sourceSyncNotice = "Renamed screenshot and original source file."
-            print("[SourceSync] source rename succeeded")
             return
         }
         guard !fileManager.fileExists(atPath: targetURL.path) else {
@@ -3920,7 +3796,6 @@ final class AppState: ObservableObject {
             shot.originalPath = targetURL.path
             shot.sourceApp = targetURL.deletingLastPathComponent().path
             sourceSyncNotice = "Renamed screenshot and original source file."
-            print("[SourceSync] source rename succeeded")
         } catch {
             print("[SourceSync] rename original failed path=\(originalURL.path) error=\(error)")
             print("[SourceSync] source rename failed: \(error)")
@@ -4003,6 +3878,46 @@ final class AppState: ObservableObject {
             try? await Task.sleep(nanoseconds: 2_400_000_000)
             guard !Task.isCancelled else { return }
             self?.toast = nil
+        }
+    }
+
+    // MARK: - AI Vision Analysis
+
+    func cachedVisionAnalysis(for screenshot: Screenshot) -> String? {
+        aiVisionCache[screenshot.uuidString]
+    }
+
+    func analyzeImageWithAI(screenshot: Screenshot) {
+        let uuid = screenshot.uuidString
+        guard !analyzingVisionUUIDs.contains(uuid) else { return }
+        guard preferences.aiVisionEnabled,
+              preferences.aiProvider == .googleAIStudioGemma,
+              let apiKey = (try? KeychainService.shared.readGoogleAIStudioAPIKey()) ?? nil,
+              !apiKey.isEmpty else {
+            print("[AIVision] Cannot analyze: vision not enabled or no API key")
+            return
+        }
+        guard let folder = try? library.originalsFolder(for: screenshot.createdAt) else {
+            print("[AIVision] Cannot resolve originals folder for screenshot")
+            return
+        }
+        let fileURL = folder.appendingPathComponent(screenshot.name)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print("[AIVision] File not found: \(fileURL.lastPathComponent)")
+            return
+        }
+        let model = preferences.googleAIStudioModel.rawValue
+        analyzingVisionUUIDs.insert(uuid)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let provider = GoogleAIStudioGemmaProvider(apiKey: apiKey, model: model)
+                let result = try await provider.analyzeImage(fileURL: fileURL)
+                self.aiVisionCache[uuid] = result
+            } catch {
+                print("[AIVision] Analysis failed: \(error.localizedDescription)")
+            }
+            self.analyzingVisionUUIDs.remove(uuid)
         }
     }
 }

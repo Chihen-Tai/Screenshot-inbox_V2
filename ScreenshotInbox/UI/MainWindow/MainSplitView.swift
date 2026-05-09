@@ -10,7 +10,6 @@ import AppKit
 /// during live window resizing.
 struct MainSplitView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var lastDebugSummary: String = ""
     @State private var sidebarDragStartWidth: CGFloat?
     @State private var inspectorDragStartWidth: CGFloat?
     @State private var liveSidebarWidth: CGFloat?
@@ -37,7 +36,6 @@ struct MainSplitView: View {
                             if sidebarDragStartWidth == nil {
                                 sidebarDragStartWidth = start
                                 liveSidebarWidth = start
-                                logSplitResize("begin sidebar width=\(format(start)) gridWidth=\(format(decision.gridWidth))")
                             }
                             let width = decision.clampedSidebarWidth(start + translation)
                             withTransaction(Transaction(animation: nil)) {
@@ -47,7 +45,6 @@ struct MainSplitView: View {
                         onDragEnded: {
                             let finalWidth = liveSidebarWidth ?? decision.sidebarWidth
                             appState.sidebarPanelWidth = finalWidth
-                            logSplitResize("end sidebar width=\(format(finalWidth)) gridWidth=\(format(decision.gridWidth))")
                             sidebarDragStartWidth = nil
                             liveSidebarWidth = nil
                         }
@@ -65,7 +62,6 @@ struct MainSplitView: View {
                             if inspectorDragStartWidth == nil {
                                 inspectorDragStartWidth = start
                                 liveInspectorWidth = start
-                                logSplitResize("begin inspector width=\(format(start)) gridWidth=\(format(decision.gridWidth))")
                             }
                             let width = decision.clampedInspectorWidth(start - translation)
                             withTransaction(Transaction(animation: nil)) {
@@ -75,7 +71,6 @@ struct MainSplitView: View {
                         onDragEnded: {
                             let finalWidth = liveInspectorWidth ?? decision.inspectorWidth
                             appState.inspectorPanelWidth = finalWidth
-                            logSplitResize("end inspector width=\(format(finalWidth)) gridWidth=\(format(decision.gridWidth))")
                             inspectorDragStartWidth = nil
                             liveInspectorWidth = nil
                         }
@@ -88,53 +83,9 @@ struct MainSplitView: View {
             .clipped()
             .onAppear {
                 updateMode(width: proxy.size.width)
-                logLayout(decision)
             }
             .onChange(of: proxy.size.width) { _, newWidth in
                 updateMode(width: newWidth)
-                logLayout(MainSplitLayoutDecision(
-                    width: newWidth,
-                    sidebarUserVisible: appState.sidebarOverrideVisible,
-                    inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
-                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
-                ))
-            }
-            .onChange(of: appState.sidebarOverrideVisible) { _, _ in
-                logLayout(MainSplitLayoutDecision(
-                    width: proxy.size.width,
-                    sidebarUserVisible: appState.sidebarOverrideVisible,
-                    inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
-                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
-                ))
-            }
-            .onChange(of: appState.inspectorOverrideVisible) { _, _ in
-                logLayout(MainSplitLayoutDecision(
-                    width: proxy.size.width,
-                    sidebarUserVisible: appState.sidebarOverrideVisible,
-                    inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
-                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
-                ))
-            }
-            .onChange(of: appState.sidebarPanelWidth) { _, _ in
-                logLayout(MainSplitLayoutDecision(
-                    width: proxy.size.width,
-                    sidebarUserVisible: appState.sidebarOverrideVisible,
-                    inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
-                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
-                ))
-            }
-            .onChange(of: appState.inspectorPanelWidth) { _, _ in
-                logLayout(MainSplitLayoutDecision(
-                    width: proxy.size.width,
-                    sidebarUserVisible: appState.sidebarOverrideVisible,
-                    inspectorUserVisible: appState.inspectorOverrideVisible,
-                    preferredSidebarWidth: liveSidebarWidth ?? appState.sidebarPanelWidth,
-                    preferredInspectorWidth: liveInspectorWidth ?? appState.inspectorPanelWidth
-                ))
             }
         }
     }
@@ -142,30 +93,8 @@ struct MainSplitView: View {
     private func updateMode(width: CGFloat) {
         let next = Theme.LayoutMode.from(width: width)
         if appState.layoutMode != next {
-            print("[MainSplitView] layoutMode \(appState.layoutMode) → \(next) at width=\(Int(width))")
             appState.layoutMode = next
         }
-    }
-
-    private func logLayout(_ decision: MainSplitLayoutDecision) {
-        #if DEBUG
-        let summary = decision.debugSummary
-        if summary != lastDebugSummary {
-            print("[Layout] \(summary)")
-            lastDebugSummary = summary
-        }
-        #endif
-    }
-
-    private func logSplitResize(_ message: String) {
-        #if DEBUG
-        print("[SplitResize] \(message)")
-        #endif
-    }
-
-    private func format(_ value: CGFloat) -> String {
-        guard value.isFinite else { return "invalid" }
-        return String(format: "%.0f", Double(value))
     }
 }
 

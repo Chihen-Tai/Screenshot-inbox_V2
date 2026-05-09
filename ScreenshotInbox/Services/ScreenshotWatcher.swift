@@ -68,7 +68,6 @@ final class ScreenshotWatcher {
         }
         self.source = source
         source.resume()
-        print("[ScreenshotWatcher] watcher started path=\(folderURL.path)")
     }
 
     func stop() {
@@ -113,7 +112,6 @@ final class ScreenshotWatcher {
     private func scanForNewScreenshots() {
         for url in candidateURLs() where !knownFileURLs.contains(url) && !pendingFileURLs.contains(url) {
             pendingFileURLs.insert(url)
-            print("[ScreenshotWatcher] new file event detected: \(url.path)")
             waitForFileThenPublish(url)
         }
     }

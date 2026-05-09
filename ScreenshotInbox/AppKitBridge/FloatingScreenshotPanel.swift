@@ -49,43 +49,55 @@ final class FloatingInboxPanelController: NSObject, NSWindowDelegate {
     ) {
         self.appState = appState
         let isAlreadyVisible = panel?.isVisible == true
+        let newSize = Self.contentSize(itemCount: items.count)
 
         let panel: NSPanel
+        let isNewPanel: Bool
         if let existing = self.panel {
             panel = existing
-            print("[FloatingPreview] show requested, existing panel reused")
+            isNewPanel = false
         } else {
             panel = makePanel()
             self.panel = panel
-            print("[FloatingInboxPanel] created")
+            isNewPanel = true
         }
+
+        // Capture frame before NSHostingController can mutate it.
+        let frameBeforeUpdate = panel.frame
 
         panel.contentViewController = NSHostingController(rootView: FloatingInboxPanelView(
             items: items,
             extraItemCount: extraItemCount,
             totalNewCount: totalNewCount,
+            panelSize: CGSize(width: newSize.width, height: newSize.height),
             appState: appState,
             expandAction: { [weak self, weak appState] in
-                print("[FloatingPreview] expand clicked, opening Main Inbox")
                 self?.hide()
                 appState?.openMainInboxFromFloatingPreview()
             },
             hideAction: { [weak self] in
-                print("[FloatingPreview] close clicked")
                 self?.hide()
             }
         ))
-        // NSHostingController auto-resizes the panel to fit SwiftUI's intrinsic content size.
-        // ScrollView/LazyVStack reports near-zero intrinsic height, collapsing the panel.
-        // Clamping back to the fixed size after every contentViewController replacement prevents this.
-        panel.setContentSize(Self.contentSize())
 
-        print("[FloatingPreviewLayout] item count = \(items.count)")
-        print("[FloatingPreviewLayout] mode = unifiedList")
-        print("[FloatingPreviewLayout] window size = \(Self.contentSize())")
-        print("[FloatingPreviewLayout] content updated without recentering")
+        if isAlreadyVisible && !isNewPanel {
+            // Already visible: resize while keeping the top-right corner fixed so the
+            // panel doesn't jump when a second or third screenshot arrives.
+            let newFrame = NSRect(
+                x: frameBeforeUpdate.maxX - newSize.width,
+                y: frameBeforeUpdate.maxY - newSize.height,
+                width: newSize.width,
+                height: newSize.height
+            )
+            panel.setFrame(newFrame, display: true, animate: false)
+        } else {
+            // First show or after hide: size correctly then center.
+            // setContentSize prevents NSHostingController zero-height collapse.
+            panel.setContentSize(newSize)
+            panel.center()
+        }
 
-        // Suppress focus steal when quietly adding a screenshot to the already-visible panel
+        // Suppress focus steal when quietly appending to the already-visible panel.
         let suppressFocus = isAlreadyVisible
             && reason == .screenshotCaptured
             && appState.screenshotInboxPreferences.keepFloatingPreviewOpenWhileCollecting
@@ -97,14 +109,15 @@ final class FloatingInboxPanelController: NSObject, NSWindowDelegate {
             panel.makeKeyAndOrderFront(nil)
             panel.orderFrontRegardless()
         }
-        print("[FloatingInboxPanel] shown reason=\(reason.logDescription) items=\(items.count)")
     }
 
     func hide() {
         panel?.orderOut(nil)
-        print("[FloatingPreview] hidden")
     }
 
+    // Called when user clicks the native red close button.
+    // Returns false so the panel is only hidden (orderOut), not destroyed.
+    // isReleasedWhenClosed = false ensures the panel can be reshown later.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         hide()
         return false
@@ -112,39 +125,48 @@ final class FloatingInboxPanelController: NSObject, NSWindowDelegate {
 
     private func makePanel() -> NSPanel {
         let panel = FloatingInboxPanel(
-            contentRect: NSRect(origin: .zero, size: Self.contentSize()),
-            // .nonactivatingPanel: first click delivers directly to controls even
-            // when another app is frontmost — without it the first click only
-            // activates the app and the button action is never fired.
-            // .titled + fullSizeContentView kept for shadow / rounded-corner chrome.
-            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
+            contentRect: NSRect(origin: .zero, size: Self.contentSize(itemCount: 0)),
+            // .nonactivatingPanel: first click hits controls even when another app is frontmost.
+            // .titled + .closable: provides the native red close button in the window chrome.
+            // .fullSizeContentView: SwiftUI content fills the full frame including title bar area.
+            styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        // Hide the native title bar so our SwiftUI header owns the top area.
         panel.title = ""
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
-        panel.standardWindowButton(.closeButton)?.isHidden = true
+
+        // Show only the close button; hide miniaturize and zoom.
+        panel.standardWindowButton(.closeButton)?.isHidden = false
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
-        panel.isMovableByWindowBackground = false
 
+        panel.isMovableByWindowBackground = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Keep panel alive after windowShouldClose → hide() so it can be reshown.
         panel.isReleasedWhenClosed = false
         panel.isMovable = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.worksWhenModal = true
         panel.hidesOnDeactivate = false
-        panel.minSize = NSSize(width: 520, height: 260)
+        panel.minSize = NSSize(width: 480, height: 220)
         panel.delegate = self
-        panel.center()
+        // Centering happens in show() after the correct content size is set.
         return panel
     }
 
-    private static func contentSize() -> NSSize {
-        NSSize(width: 620, height: 380)
+    /// Height varies with item count; width is fixed at 560pt.
+    private static func contentSize(itemCount: Int) -> NSSize {
+        let height: CGFloat
+        switch itemCount {
+        case 0:  height = 220
+        case 1:  height = 240
+        case 2:  height = 320
+        default: height = 380
+        }
+        return NSSize(width: 560, height: height)
     }
 }
 
@@ -159,16 +181,19 @@ private struct FloatingInboxPanelView: View {
     let items: [ScreenshotItem]
     let extraItemCount: Int
     let totalNewCount: Int
+    /// Explicit size passed from the controller so the SwiftUI root frame matches
+    /// the panel size. Without this, ScrollView + LazyVStack reports near-zero
+    /// intrinsic height and NSHostingController collapses the panel on every
+    /// contentViewController reassignment.
+    let panelSize: CGSize
     @ObservedObject var appState: AppState
     let expandAction: () -> Void
-    let hideAction: () -> Void
+    let hideAction: () -> Void   // used by Escape keyboard shortcut only
 
     @State private var selectedItemID: UUID?
 
     private var store: ScreenshotInboxStore { appState.screenshotInboxStore }
 
-    /// The item keyboard shortcuts act on: the explicitly selected one, or the
-    /// first visible one as a fallback.
     private var activeItem: ScreenshotItem? {
         if let id = selectedItemID, let match = items.first(where: { $0.id == id }) {
             return match
@@ -179,21 +204,15 @@ private struct FloatingInboxPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-                .frame(height: 56)
+                .frame(height: 44)
             Divider().opacity(0.45)
             if items.isEmpty {
-                let _ = print("[FloatingPreview] visible item count = 0")
-                let _ = print("[FloatingPreview] rendering empty state")
                 emptyStateContent
             } else {
-                let _ = print("[FloatingPreview] visible item count = \(items.count)")
-                let _ = print("[FloatingPreview] rendering list rows = \(items.count)")
                 scrollContent
             }
         }
-        // Explicit frame prevents NSHostingController from reporting zero preferred
-        // content size (which collapses the panel when contentViewController is replaced).
-        .frame(width: 620, height: 380)
+        .frame(width: panelSize.width, height: panelSize.height)
         .background(keyboardShortcuts.frame(width: 0, height: 0).opacity(0))
     }
 
@@ -218,17 +237,12 @@ private struct FloatingInboxPanelView: View {
             .buttonStyle(.borderless)
             .focusable(false)
             .help("Open Inbox")
-
-            Button(action: hideAction) {
-                Image(systemName: "xmark")
-                    .imageScale(.small)
-            }
-            .buttonStyle(.borderless)
-            .focusable(false)
-            .help("Hide")
+            // No custom close button — the native red traffic-light button is used.
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        // Leading padding clears the traffic-light zone (close button sits at ~x=8).
+        .padding(.leading, 56)
+        .padding(.trailing, 12)
+        .padding(.vertical, 8)
         .background(WindowDragArea())
     }
 
@@ -242,12 +256,9 @@ private struct FloatingInboxPanelView: View {
                         item: item,
                         isSelected: selectedItemID == item.id,
                         quickLookAction: {
-                            print("[FloatingPreview] row double-clicked, quick look id = \(item.id)")
                             quickLook(item)
                         },
                         onSelect: {
-                            print("[FloatingPreview] row clicked id = \(item.id)")
-                            print("[FloatingPreview] row selected immediately")
                             selectedItemID = item.id
                         }
                     )
@@ -287,40 +298,16 @@ private struct FloatingInboxPanelView: View {
 
     @ViewBuilder
     private func itemContextMenu(for item: ScreenshotItem) -> some View {
-        Button("Copy Image") {
-            print("[ContextMenu] action = floating.copyImage")
-            store.copy(item)
-        }
-        Button("Copy File") {
-            print("[ContextMenu] action = floating.copyFile")
-            copyFile(item)
-        }
-        Button("Reveal in Finder") {
-            print("[ContextMenu] action = floating.revealInFinder")
-            store.reveal(item)
-        }
-        Button("Open") {
-            print("[ContextMenu] action = floating.open")
-            store.open(item)
-        }
-        Button("Quick Look") {
-            print("[ContextMenu] action = floating.quickLook")
-            quickLook(item)
-        }
-        Button("Export as PDF…") {
-            print("[ContextMenu] action = floating.exportAsPDF")
-            appState.exportInboxItemAsPDF(item)
-        }
+        Button("Copy Image") { store.copy(item) }
+        Button("Copy File") { copyFile(item) }
+        Button("Reveal in Finder") { store.reveal(item) }
+        Button("Open") { store.open(item) }
+        Button("Quick Look") { quickLook(item) }
+        Button("Export as PDF…") { appState.exportInboxItemAsPDF(item) }
         Divider()
-        Button("Dismiss from Preview") {
-            print("[ContextMenu] action = floating.dismiss")
-            appState.dismissScreenshotInboxItem(item)
-        }
+        Button("Dismiss from Preview") { appState.dismissScreenshotInboxItem(item) }
         Divider()
-        Button("Move to Trash…", role: .destructive) {
-            print("[ContextMenu] action = floating.moveToTrash")
-            appState.deleteScreenshotInboxItemWithConfirmation(item)
-        }
+        Button("Move to Trash…", role: .destructive) { appState.deleteScreenshotInboxItemWithConfirmation(item) }
     }
 
     private func openInbox(selecting item: ScreenshotItem?) {
@@ -339,16 +326,11 @@ private struct FloatingInboxPanelView: View {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.writeObjects([item.url as NSURL])
-        print("[Copy] copied 1 item(s)")
     }
 
     private func itemProvider(for item: ScreenshotItem) -> NSItemProvider {
-        print("[FloatingPreview] row drag started id = \(item.id)")
-        if FileManager.default.fileExists(atPath: item.url.path) {
-            print("[Drag] started with 1 file(s)")
-        } else {
+        if !FileManager.default.fileExists(atPath: item.url.path) {
             print("[MissingFile] file missing url = \(item.url.path)")
-            print("[Drag] started with 0 file(s)")
         }
         return NSItemProvider(contentsOf: item.url) ?? NSItemProvider(object: item.url as NSURL)
     }
@@ -359,61 +341,52 @@ private struct FloatingInboxPanelView: View {
         Group {
             Button("Copy") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Cmd-C \(item.url.lastPathComponent)")
                 store.copy(item)
             }
             .keyboardShortcut("c", modifiers: .command)
 
             Button("Open") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Cmd-O \(item.url.lastPathComponent)")
                 store.open(item)
             }
             .keyboardShortcut("o", modifiers: .command)
 
             Button("Quick Look") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Space \(item.url.lastPathComponent)")
                 quickLook(item)
             }
             .keyboardShortcut(.space, modifiers: [])
 
             Button("Quick Look Return") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Return \(item.url.lastPathComponent)")
                 quickLook(item)
             }
             .keyboardShortcut(.return, modifiers: [])
 
             Button("Reveal") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Cmd-R \(item.url.lastPathComponent)")
                 store.reveal(item)
             }
             .keyboardShortcut("r", modifiers: .command)
 
             Button("Dismiss") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Delete \(item.url.lastPathComponent)")
                 appState.dismissScreenshotInboxItem(item)
             }
             .keyboardShortcut(.delete, modifiers: [])
 
             Button("Trash") {
                 guard let item = activeItem else { return }
-                print("[FloatingPanel] shortcut Cmd-Delete \(item.url.lastPathComponent)")
                 appState.deleteScreenshotInboxItemWithConfirmation(item)
             }
             .keyboardShortcut(.delete, modifiers: .command)
 
             Button("Hide") {
-                print("[FloatingPanel] shortcut Escape")
                 hideAction()
             }
             .keyboardShortcut(.escape, modifiers: [])
 
             Button("Open Inbox") {
-                print("[FloatingPanel] shortcut Cmd-Return")
                 openInbox(selecting: activeItem)
             }
             .keyboardShortcut(.return, modifiers: .command)
@@ -444,15 +417,15 @@ private struct FloatingScreenshotPanelRow: View {
     let onSelect: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             ScreenshotInboxThumbnail(url: item.url)
-                .frame(width: 80, height: 80)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.url.lastPathComponent)
                     .font(.system(size: 12, weight: .medium))
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .truncationMode(.middle)
                 Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.system(size: 11))
@@ -466,7 +439,7 @@ private struct FloatingScreenshotPanelRow: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -482,8 +455,6 @@ private struct FloatingScreenshotPanelRow: View {
                 )
         )
         .contentShape(Rectangle())
-        // onTapGesture fires immediately — no double-click wait because
-        // simultaneousGesture below breaks the exclusive-gesture relationship.
         .onTapGesture { onSelect() }
         .simultaneousGesture(TapGesture(count: 2).onEnded { quickLookAction() })
     }

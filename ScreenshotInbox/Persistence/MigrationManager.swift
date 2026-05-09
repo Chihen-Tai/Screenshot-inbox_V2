@@ -32,13 +32,9 @@ final class MigrationManager {
             .filter { !applied.contains($0.version) }
             .sorted { $0.version < $1.version }
 
-        guard !pending.isEmpty else {
-            print("[Migrations] up to date (applied=\(applied.sorted()))")
-            return
-        }
+        guard !pending.isEmpty else { return }
 
         for migration in pending {
-            print("[Migrations] applying v\(migration.version)")
             try database.transaction {
                 try migration.up(database)
                 let stmt = try database.prepare(
@@ -47,7 +43,6 @@ final class MigrationManager {
                 try stmt.bind(2, Date().timeIntervalSince1970)
                 _ = try stmt.step()
             }
-            print("[Migrations] v\(migration.version) applied")
         }
     }
 

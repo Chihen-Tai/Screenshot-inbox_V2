@@ -12,6 +12,7 @@ enum SettingsTab: String, CaseIterable, Hashable {
     case ocr = "OCR"
     case appearance = "Appearance"
     case quickFilters = "Quick Filters"
+    case aiSuggestions = "AI Suggestions"
     case advanced = "Advanced"
 
     static var available: [SettingsTab] {
@@ -54,7 +55,6 @@ struct SettingsView: View {
                     ScreenshotSettingsView()
                 case .floatingPreview:
                     FloatingPreviewSettingsView()
-                        .onAppear { print("[Settings] Floating Preview section loaded") }
                 case .menuBar:
                     MenuBarSettingsView()
                 case .library:
@@ -71,6 +71,8 @@ struct SettingsView: View {
                     AppearanceSettingsView()
                 case .quickFilters:
                     QuickFiltersSettingsView()
+                case .aiSuggestions:
+                    AISuggestionsSettingsView()
                 case .advanced:
                     #if DEBUG
                     AdvancedSettingsView()

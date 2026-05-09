@@ -15,7 +15,8 @@ struct AppCommands: Commands {
     @ObservedObject var appState: AppState
 
     var body: some Commands {
-        CommandGroup(replacing: .newItem) { }
+
+        // ── App menu ───────────────────────────────────────────────────────────
 
         CommandGroup(replacing: .appInfo) {
             Button("About \(AppReleaseInfo.name)") {
@@ -26,7 +27,7 @@ struct AppCommands: Commands {
                     \(AppReleaseInfo.privacyNote)
                     License: \(AppReleaseInfo.license)
                     \(AppReleaseInfo.copyright)
-                    GitHub: \(AppReleaseInfo.repositoryPlaceholder)
+                    GitHub: \(AppReleaseInfo.repositoryURL)
                     """,
                     attributes: [
                         .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -48,11 +49,62 @@ struct AppCommands: Commands {
             .keyboardShortcut(",", modifiers: [.command])
         }
 
+        // ── File menu ──────────────────────────────────────────────────────────
+
+        CommandMenu("File") {
+            Button("Open Inbox") {
+                AppWindowRouter.shared.openMainInbox(from: .menuBar)
+            }
+            .keyboardShortcut("o", modifiers: [.command])
+
+            Button("Show Floating Preview") {
+                appState.showLatestScreenshotPanel()
+            }
+
+            Divider()
+
+            Button("Import Screenshots…") {
+                appState.importFromMenuBar()
+            }
+
+            Divider()
+
+            Button("Export Selected…") {
+                appState.router.exportOriginals(appState.selectedScreenshots)
+            }
+            .disabled(appState.selectedScreenshots.isEmpty)
+            .keyboardShortcut("e", modifiers: [.command])
+
+            Button(appState.selectedScreenshots.count > 1
+                   ? "Combine \(appState.selectedScreenshots.count) Screenshots into PDF…"
+                   : "Export as PDF…") {
+                appState.router.mergeIntoPDF(appState.selectedScreenshots)
+            }
+            .disabled(appState.selectedScreenshots.isEmpty)
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Reveal in Finder") {
+                appState.router.revealInFinder(appState.selectedScreenshots)
+            }
+            .disabled(appState.selectedScreenshots.isEmpty)
+            .keyboardShortcut("r", modifiers: [.command])
+
+            Divider()
+
+            Button("Move Selected to Trash") {
+                appState.router.moveToTrash(appState.selectedScreenshots)
+            }
+            .disabled(appState.selectedScreenshots.isEmpty)
+            .keyboardShortcut(.delete, modifiers: [.command])
+        }
+
+        // ── Edit menu ──────────────────────────────────────────────────────────
+
         CommandGroup(replacing: .undoRedo) {
             Button(appState.undoMenuTitle) {
-                print("[AppCommands] Undo fired; firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
                 if AppKitFocusHelper.isTextInputFocused() {
-                    print("[AppCommands] forwarding undo to focused text")
                     NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
                     return
                 }
@@ -61,7 +113,6 @@ struct AppCommands: Commands {
             .keyboardShortcut("z", modifiers: [.command])
 
             Button("Redo") {
-                print("[AppCommands] Redo fired; firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
                 NSApp.sendAction(Selector(("redo:")), to: nil, from: nil)
             }
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -96,55 +147,87 @@ struct AppCommands: Commands {
             .keyboardShortcut("v")
 
             Button("Select All") {
-                print("[AppCommands] Select All fired; instance=\(ObjectIdentifier(appState))")
-                print("[AppCommands] firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
                 if AppKitFocusHelper.isTextInputFocused() {
-                    print("[AppCommands] forwarding selectAll to focused text")
                     NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: nil)
                     return
                 }
                 appState.selectAllVisibleScreenshots()
             }
             .keyboardShortcut("a", modifiers: [.command])
+
+            Button("Deselect All") {
+                if AppKitFocusHelper.isTextInputFocused() { return }
+                appState.clearScreenshotSelection()
+            }
+            .disabled(appState.selectionCount == 0)
+            .keyboardShortcut("a", modifiers: [.command, .shift])
         }
 
         CommandGroup(after: .pasteboard) {
-            Button("Reveal in Finder") {
-                let shots = appState.selectedScreenshots
-                guard !shots.isEmpty else { return }
-                print("[AppCommands] Reveal in Finder fired count=\(shots.count)")
-                appState.router.revealInFinder(shots)
-            }
-            .keyboardShortcut("r", modifiers: [.command])
-
             Divider()
-
-            Button("Export Original…") {
-                let shots = appState.selectedScreenshots
-                guard !shots.isEmpty else { return }
-                print("[AppCommands] Export Original fired count=\(shots.count)")
-                appState.router.exportOriginals(shots)
+            Button("Rename…") {
+                guard let shot = appState.selectedScreenshots.first else { return }
+                appState.router.rename(shot)
             }
-            .keyboardShortcut("e", modifiers: [.command])
-            .disabled(appState.selectedScreenshots.isEmpty)
+            .disabled(appState.selectedScreenshots.count != 1)
+        }
 
-            Button(appState.selectedScreenshots.count > 1
-                   ? "Combine \(appState.selectedScreenshots.count) Screenshots into PDF…"
-                   : "Export as PDF…") {
-                let shots = appState.selectedScreenshots
-                guard !shots.isEmpty else { return }
-                print("[AppCommands] Combine into PDF fired count=\(shots.count)")
-                appState.router.mergeIntoPDF(shots)
-            }
-            .keyboardShortcut("e", modifiers: [.command, .shift])
-            .disabled(appState.selectedScreenshots.isEmpty)
+        // ── View menu ──────────────────────────────────────────────────────────
+        // .toolbar and .sidebar placements inject into the system View menu.
+
+        CommandGroup(replacing: .toolbar) {
+            Toggle("Show Sidebar", isOn: $appState.sidebarOverrideVisible)
+
+            Toggle("Show Inspector", isOn: $appState.inspectorOverrideVisible)
+                .keyboardShortcut("i", modifiers: [.command, .option])
         }
 
         CommandGroup(after: .toolbar) {
-            Button(appState.inspectorOverrideVisible ? "Hide Inspector" : "Show Inspector") {
-                appState.inspectorOverrideVisible.toggle()
+            Divider()
+
+            Button("Show Floating Preview") {
+                appState.showLatestScreenshotPanel()
             }
-            .keyboardShortcut("i", modifiers: [.command, .option])
+
+            Divider()
+
+            Button("Refresh Library") {
+                appState.autoImportService.scanEnabledSources()
+            }
+        }
+
+        // ── Window menu ────────────────────────────────────────────────────────
+
+        CommandGroup(after: .windowList) {
+            Divider()
+            Button("Main Inbox") {
+                AppWindowRouter.shared.openMainInbox(from: .menuBar)
+            }
+            Button("Settings") {
+                AppWindowRouter.shared.openSettings()
+            }
+        }
+
+        // ── Help menu ──────────────────────────────────────────────────────────
+
+        CommandGroup(replacing: .help) {
+            Button("\(AppReleaseInfo.name) Help") {
+                if let url = URL(string: AppReleaseInfo.repositoryURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+
+            Button("GitHub Repository") {
+                if let url = URL(string: AppReleaseInfo.repositoryURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+
+            Button("Report an Issue") {
+                if let url = URL(string: AppReleaseInfo.repositoryIssuesURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         }
     }
 }

@@ -4,6 +4,17 @@ struct ActionsSectionView: View {
     @EnvironmentObject private var appState: AppState
     let screenshot: Screenshot
 
+    private var isAnalyzing: Bool {
+        appState.analyzingVisionUUIDs.contains(screenshot.uuidString)
+    }
+    private var cachedAnalysis: String? {
+        appState.aiVisionCache[screenshot.uuidString]
+    }
+    private var showVisionAction: Bool {
+        appState.preferences.aiVisionEnabled &&
+        appState.preferences.aiProvider == .googleAIStudioGemma
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Actions")
@@ -90,6 +101,16 @@ struct ActionsSectionView: View {
                               isDestructive: true) {
                         appState.router.moveToTrash([screenshot])
                     }
+                    if showVisionAction {
+                        rowDivider
+                        ActionRow(
+                            title: isAnalyzing ? "Analyzing Image…" : (cachedAnalysis != nil ? "Re-analyze Image with AI" : "Analyze Image with AI"),
+                            systemImage: "sparkles.rectangle.stack",
+                            isEnabled: !isAnalyzing
+                        ) {
+                            appState.analyzeImageWithAI(screenshot: screenshot)
+                        }
+                    }
                 }
             }
             .background(
@@ -97,6 +118,18 @@ struct ActionsSectionView: View {
                     .fill(Theme.SemanticColor.quietFill.opacity(0.35))
             )
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
+
+            if let analysis = cachedAnalysis {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("AI IMAGE ANALYSIS")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.SemanticColor.secondaryLabel)
+                    Text(analysis)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.SemanticColor.label)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 

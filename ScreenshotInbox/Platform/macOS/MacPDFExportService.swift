@@ -30,7 +30,7 @@ final class MacPDFExportService: PDFExporting {
 
             var pageCount = 0
             var skipped = 0
-            for (index, screenshot) in ordered.enumerated() {
+            for screenshot in ordered {
                 guard let imageURL = self.imageURL(for: screenshot),
                       let image = self.loadCGImage(at: imageURL) else {
                     #if DEBUG
@@ -78,30 +78,9 @@ final class MacPDFExportService: PDFExporting {
                     skipped += 1
                     continue
                 }
-
-                #if DEBUG
-                self.writeDebugSourceCopy(from: imageURL, pageIndex: index + 1)
-                #endif
-
                 context.beginPDFPage(self.pageInfoDictionary(mediaBox: pageRect))
                 context.setFillColor(CGColor(gray: 1, alpha: 1))
                 context.fill(pageRect)
-                #if DEBUG
-                print("[PDFExport] screenshot uuid: \(screenshot.uuidString)")
-                print("[PDFExport] libraryPath: \(screenshot.libraryPath ?? "nil")")
-                print("[PDFExport] originalPath: unavailable")
-                print("[PDFExport] image source used: managed library original")
-                print("[PDFExport] image path: \(imageURL.path)")
-                print("[PDFExport] loaded image pixel size: \(self.debugSize(imageSize))")
-                print("[PDFExport] page mode: \(options.pageSize.rawValue)")
-                print("[PDFExport] resolved page: \(self.debugSize(pageRect.size))")
-                print("[PDFExport] orientation: \(options.orientation.rawValue)")
-                print("[PDFExport] margin: \(self.safeNumber(margin))")
-                print("[PDFExport] available: \(self.debugRect(contentRect))")
-                print("[PDFExport] drawRect: \(self.debugRect(drawRect))")
-                print("[PDFExport] scale: \(self.safeNumber(placement.scale))")
-                print("[PDFExport] imageFit: \(options.imageFit.rawValue)")
-                #endif
                 context.draw(image, in: drawRect)
                 context.endPDFPage()
                 pageCount += 1
@@ -338,27 +317,6 @@ final class MacPDFExportService: PDFExporting {
             drawRect.minY >= contentRect.minY - epsilon &&
             drawRect.maxY <= contentRect.maxY + epsilon
     }
-
-    #if DEBUG
-    private func writeDebugSourceCopy(from sourceURL: URL, pageIndex: Int) {
-        let debugFolder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PDFExportDebug", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: debugFolder, withIntermediateDirectories: true)
-            let ext = sourceURL.pathExtension.isEmpty ? "png" : sourceURL.pathExtension
-            let destination = debugFolder.appendingPathComponent(
-                String(format: "page-%02d-source.%@", pageIndex, ext)
-            )
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.copyItem(at: sourceURL, to: destination)
-            print("[PDFExport] debug source copy: \(destination.path)")
-        } catch {
-            print("[PDFExport] debug source copy failed: \(error)")
-        }
-    }
-
     private func safeNumber(_ value: CGFloat) -> String {
         guard value.isFinite else { return "invalid(\(value))" }
         return String(format: "%.1f", Double(value))
@@ -371,5 +329,4 @@ final class MacPDFExportService: PDFExporting {
     private func debugRect(_ rect: CGRect) -> String {
         "x=\(safeNumber(rect.origin.x)) y=\(safeNumber(rect.origin.y)) w=\(safeNumber(rect.width)) h=\(safeNumber(rect.height))"
     }
-    #endif
 }

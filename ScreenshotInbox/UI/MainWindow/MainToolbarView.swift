@@ -48,41 +48,31 @@ struct MainToolbarView: ToolbarContent {
     var onCustomizeFilters: () -> Void = {}
 
     var body: some ToolbarContent {
+        // Sidebar toggle — borderless icon-only, matches Finder's sidebar toggle style.
         ToolbarItemGroup(placement: .navigation) {
             Button {
                 sidebarVisible.toggle()
             } label: {
-                Label("Sidebar", systemImage: "sidebar.left")
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 15, weight: .regular))
             }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
             .help(mode == .compact
                   ? "Sidebar is hidden in compact windows"
                   : (sidebarVisible ? "Hide sidebar" : "Show sidebar"))
         }
 
-        ToolbarItem(placement: .principal) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.SemanticColor.secondaryLabel)
-                TextField("Search filename, OCR, tags, QR links...", text: $searchQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(
-                        minWidth: Theme.Layout.toolbarSearchMinWidth,
-                        idealWidth: Theme.Layout.toolbarSearchIdealWidth,
-                        maxWidth: Theme.Layout.toolbarSearchMaxWidth
-                    )
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule().fill(Theme.SemanticColor.quietFill)
-            )
-        }
+        // Title/subtitle are rendered via .navigationTitle / .navigationSubtitle
+        // in MainWindowView — no .principal override so macOS draws them natively.
 
         ToolbarItemGroup(placement: .primaryAction) {
+            // Compact search field: stable width, rectangular (not capsule), right-aligned.
+            ToolbarSearchField(query: $searchQuery)
+
+            Divider()
+                .padding(.vertical, 5)
+
             Button {
                 onImport()
             } label: {
@@ -203,5 +193,58 @@ struct MainToolbarView: ToolbarContent {
                 onOpenSettings()
             }
         }
+    }
+}
+
+/// Compact search field for the toolbar trailing area.
+/// Uses a stable fixed width and a rectangular (non-capsule) container
+/// so it feels native and doesn't push toolbar height beyond the macOS standard.
+private struct ToolbarSearchField: View {
+    @Binding var query: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            TextField("Search screenshots, OCR, tags…", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .focused($isFocused)
+                .accessibilityLabel("Search screenshots")
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(width: 220)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(
+                    isFocused
+                        ? Color.accentColor.opacity(0.6)
+                        : Color(nsColor: .separatorColor).opacity(0.7),
+                    lineWidth: isFocused ? 1 : 0.5
+                )
+        )
+        .animation(.easeInOut(duration: 0.15), value: query.isEmpty)
+        .animation(.easeInOut(duration: 0.12), value: isFocused)
     }
 }

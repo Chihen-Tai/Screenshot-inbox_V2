@@ -73,12 +73,6 @@ struct BatchActionBarView: View {
         .frame(height: 48)
         .padding(.horizontal, Theme.Layout.batchBarHorizontalInset)
         .padding(.bottom, Theme.Layout.batchBarBottomInset)
-        .onAppear {
-            print("[BatchBar] appear; selected count:", appState.selection.count)
-        }
-        .onChange(of: appState.selection.count) { _, newValue in
-            print("[BatchBar] selected count:", newValue)
-        }
     }
 }
 

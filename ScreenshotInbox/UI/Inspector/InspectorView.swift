@@ -55,12 +55,6 @@ struct InspectorView: View {
             ideal: Theme.Layout.inspectorIdeal,
             max: Theme.Layout.inspectorMax
         )
-        .onAppear {
-            print("[Inspector] onAppear; appState instance=\(ObjectIdentifier(appState)); selected count:", appState.selectedScreenshots.count)
-        }
-        .onChange(of: appState.selection.count) { _, newValue in
-            print("[Inspector] selected count:", newValue)
-        }
     }
 
     private enum InspectorState {

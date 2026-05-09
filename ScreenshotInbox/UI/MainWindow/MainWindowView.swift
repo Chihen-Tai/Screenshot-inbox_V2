@@ -67,7 +67,6 @@ struct MainWindowView: View {
                 )
             )
             .onAppear {
-                print("[MainWindow] onAppear; appState instance=\(ObjectIdentifier(appState))")
                 // Drive the window-level shortcut install from SwiftUI's
                 // lifecycle. AppKit `viewDidAppear` on a representable's
                 // controller is unreliable for this — `.onAppear` always fires.
@@ -78,7 +77,6 @@ struct MainWindowView: View {
             // here, so this layer guarantees Escape clears grid selection
             // unless a text input wants to cancel its own editing first.
             .onExitCommand {
-                print("[MainWindow] onExitCommand; firstResponder=\(AppKitFocusHelper.describeFirstResponder())")
                 if AppKitFocusHelper.isTextInputFocused() {
                     NSApp.sendAction(#selector(NSResponder.cancelOperation(_:)), to: nil, from: nil)
                     return
@@ -102,7 +100,7 @@ struct MainWindowView: View {
             }
             // Phase 5 — Rename sheet.
             .sheet(item: renameBinding) { shot in
-                RenameSheet(originalName: shot.name)
+                RenameSheet(screenshot: shot)
                     .environmentObject(appState)
             }
             .sheet(isPresented: $appState.isTagEditorPresented) {

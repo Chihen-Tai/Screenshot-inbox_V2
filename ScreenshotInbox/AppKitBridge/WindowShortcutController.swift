@@ -56,107 +56,42 @@ final class WindowShortcutController {
     // MARK: - Event handling
 
     private func handle(_ event: NSEvent) -> NSEvent? {
-        print("[Shortcut] monitor fired")
-        guard let window = windowProvider?() else {
-            print("[Shortcut] no window available; passing event through")
-            return event
-        }
-        guard window.isKeyWindow, event.window === window else {
-            print("[Shortcut] event not for our key window; passing through")
-            return event
-        }
+        guard let window = windowProvider?() else { return event }
+        guard window.isKeyWindow, event.window === window else { return event }
 
         let firstResponder = window.firstResponder
         let key = event.charactersIgnoringModifiers
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        print("[Shortcut] keyCode:", event.keyCode)
-        print("[Shortcut] chars:", key ?? "nil")
-        print("[Shortcut] flags:", flags)
-        print("[Shortcut] firstResponder:", String(describing: firstResponder))
         let isTextInput = isTextInputFirstResponder(firstResponder)
-        print("[Shortcut] isTextInput:", isTextInput)
 
-        if isTextInput {
-            return event
-        }
+        if isTextInput { return event }
 
         let isCommandOnly = flags.contains(.command)
             && !flags.contains(.shift)
             && !flags.contains(.option)
             && !flags.contains(.control)
 
-        if isCommandOnly, key?.lowercased() == "a" {
-            print("[Shortcut] Cmd+A detected, calling onSelectAll")
-            onSelectAll?()
-            return nil
-        }
+        if isCommandOnly, key?.lowercased() == "a" { onSelectAll?(); return nil }
+        if isCommandOnly, key?.lowercased() == "c" { onCopy?(); return nil }
+        if isCommandOnly, key?.lowercased() == "r" { onReveal?(); return nil }
+        if isCommandOnly, key?.lowercased() == "o" { onOpen?(); return nil }
 
-        if isCommandOnly, key?.lowercased() == "c" {
-            print("[Shortcut] Cmd+C detected, calling onCopy")
-            onCopy?()
-            return nil
-        }
-
-        if isCommandOnly, key?.lowercased() == "r" {
-            print("[Shortcut] Cmd+R detected, calling onReveal")
-            onReveal?()
-            return nil
-        }
-
-        if isCommandOnly, key?.lowercased() == "o" {
-            print("[Shortcut] Cmd+O detected, calling onOpen")
-            onOpen?()
-            return nil
-        }
-
-        // Cmd-Delete / Cmd-Forward-Delete → trash selected (with confirmation).
+        // Cmd-Delete / Cmd-Forward-Delete → trash selected.
         if isCommandOnly && (event.keyCode == 51 || event.keyCode == 117) {
-            print("[Shortcut] Cmd+Delete detected, calling onTrash")
-            onTrash?()
-            return nil
+            onTrash?(); return nil
         }
 
         // Escape: keyCode 53, or ESC character (\u{1b}).
-        if event.keyCode == 53 || key == "\u{1b}" {
-            print("[Shortcut] Escape detected, calling onClearSelection")
-            onClearSelection?()
-            return nil
-        }
+        if event.keyCode == 53 || key == "\u{1b}" { onClearSelection?(); return nil }
 
-        // Phase 5 single-key shortcuts. Only fire on bare keys (no modifiers)
-        // so they don't fight Cmd-Delete / Shift-Space etc.
+        // Bare-key shortcuts (no modifiers).
         let isPlainKey = flags.isEmpty || flags == .function
 
-        // Delete / Forward-Delete → mock trash.
-        if isPlainKey && (event.keyCode == 51 || event.keyCode == 117) {
-            print("[Shortcut] Delete detected, calling onTrash")
-            onTrash?()
-            return nil
-        }
-
-        // Space → toggle preview.
-        if isPlainKey, event.keyCode == 49 {
-            print("[Shortcut] Space detected, calling onPreview")
-            onPreview?()
-            return nil
-        }
-
-        if isPlainKey, event.keyCode == 123, onPreviewPrevious?() == true {
-            print("[Shortcut] Left arrow preview navigation")
-            return nil
-        }
-
-        if isPlainKey, event.keyCode == 124, onPreviewNext?() == true {
-            print("[Shortcut] Right arrow preview navigation")
-            return nil
-        }
-
-        // Return / Enter → rename.
-        if isPlainKey, event.keyCode == 36 {
-            print("[Shortcut] Return detected, calling onRename")
-            onRename?()
-            return nil
-        }
+        if isPlainKey && (event.keyCode == 51 || event.keyCode == 117) { onTrash?(); return nil }
+        if isPlainKey, event.keyCode == 49 { onPreview?(); return nil }
+        if isPlainKey, event.keyCode == 123, onPreviewPrevious?() == true { return nil }
+        if isPlainKey, event.keyCode == 124, onPreviewNext?() == true { return nil }
+        if isPlainKey, event.keyCode == 36 { onRename?(); return nil }
 
         return event
     }

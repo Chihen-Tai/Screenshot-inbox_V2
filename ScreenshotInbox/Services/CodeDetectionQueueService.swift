@@ -100,9 +100,6 @@ final class CodeDetectionQueueService {
                 )
             }
             try repository.saveCodes(codes, for: uuid)
-            #if DEBUG
-            print("[CodeDetection] complete \(uuid) codes=\(codes.count)")
-            #endif
             onComplete?(uuid)
         } catch {
             print("[CodeDetection] failed \(uuid): \(error)")

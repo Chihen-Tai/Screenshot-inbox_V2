@@ -35,11 +35,6 @@ final class MacOCRService: OCRService {
                 for: request,
                 desired: languages.isEmpty ? preferredLanguages : languages
             )
-            #if DEBUG
-            print("[OCR] input image path: \(imageURL.path)")
-            print("[OCR] recognition languages: \(request.recognitionLanguages.joined(separator: ", "))")
-            print("[OCR] recognitionLevel: accurate")
-            #endif
 
             let handler = VNImageRequestHandler(url: imageURL, options: [:])
             do {
@@ -63,9 +58,6 @@ final class MacOCRService: OCRService {
             let confidence = confidences.isEmpty
                 ? nil
                 : Double(confidences.reduce(0, +)) / Double(confidences.count)
-            #if DEBUG
-            print("[OCR] result length: \(text.count)")
-            #endif
             return OCRRecognitionResult(text: text, language: nil, confidence: confidence)
         }.value
     }

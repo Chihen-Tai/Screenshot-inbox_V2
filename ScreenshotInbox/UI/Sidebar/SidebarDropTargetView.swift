@@ -61,12 +61,6 @@ final class DropTargetNSView: NSView {
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        #if DEBUG
-        if let targetCollectionUUID {
-            print("[CollectionReorder] drop entered target uuid=\(targetCollectionUUID) name=\(targetName)")
-        }
-        print("[CollectionReorder] pasteboard/provider types: \(sender.draggingPasteboard.types?.map(\.rawValue) ?? [])")
-        #endif
         guard acceptsInternalScreenshotIDs(sender) || acceptsInternalCollectionID(sender) else { return [] }
         onTargeted?(true)
         return acceptsInternalCollectionID(sender) ? .move : .copy
@@ -75,11 +69,6 @@ final class DropTargetNSView: NSView {
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         if let collectionUUID = acceptedCollectionID(sender) {
             let position = collectionDropPosition(for: sender)
-            #if DEBUG
-            if let targetCollectionUUID {
-                print("[CollectionReorder] hovering source=\(collectionUUID) target=\(targetCollectionUUID)")
-            }
-            #endif
             onCollectionHover?(collectionUUID, position)
             return .move
         }
@@ -96,26 +85,14 @@ final class DropTargetNSView: NSView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        #if DEBUG
-        print("[CollectionReorder] perform drop")
-        if let targetCollectionUUID {
-            print("[SidebarDrop] target collection uuid=\(targetCollectionUUID) name=\(targetName)")
-        }
-        #endif
         defer { onTargeted?(false) }
         if let collectionUUID = acceptedCollectionID(sender) {
             let position = collectionDropPosition(for: sender)
-            #if DEBUG
-            print("[SidebarDrop] payload type collection ID uuid=\(collectionUUID)")
-            #endif
             onCollectionDrop?(collectionUUID, position)
             return true
         }
         let raw = sender.draggingPasteboard.string(forType: InternalScreenshotDrag.pasteboardType)
         let ids = InternalScreenshotDrag.decode(raw)
-        #if DEBUG
-        print("[SidebarDrop] decoded IDs: \(ids.map(\.uuidString))")
-        #endif
         guard !ids.isEmpty else { return false }
         onDrop?(ids)
         return true

@@ -122,7 +122,6 @@ final class ScreenshotCollectionViewController: NSViewController {
         // Escape land here. `viewDidMoveToWindow` on the collection view
         // already does this, but a representable can re-host the controller.
         view.window?.makeFirstResponder(collectionView)
-        print("[Grid] viewDidAppear; firstResponder=\(String(describing: view.window?.firstResponder))")
         // Note: the window-level NSEvent monitor is now installed by
         // AppState.installShortcuts() from MainWindowView.onAppear, so it
         // runs once per window regardless of whether viewDidAppear fires.
@@ -139,9 +138,6 @@ final class ScreenshotCollectionViewController: NSViewController {
         let w = view.bounds.width
         if abs(w - lastLaidOutWidth) > 0.5 {
             lastLaidOutWidth = w
-            #if DEBUG
-            print("[GridLayout] host bounds width=\(Int(w))")
-            #endif
             collectionView?.collectionViewLayout?.invalidateLayout()
         }
     }
@@ -165,9 +161,6 @@ final class ScreenshotCollectionViewController: NSViewController {
             if !changedPaths.isEmpty {
                 self.screenshots = screenshots
                 collectionView?.reloadItems(at: Set(changedPaths))
-                #if DEBUG
-                print("[Rename] collection item reloaded: \(changedPaths.map(\.item))")
-                #endif
             }
         }
         if needsReload || selectedIDs != currentSelectedIDs {
@@ -191,13 +184,10 @@ final class ScreenshotCollectionViewController: NSViewController {
 
     private func syncSelectionFromCollectionView(reason: String) {
         guard let cv = collectionView else { return }
-        print("[SelectionDebug] NSCollectionView selectedIndexPaths count = \(cv.selectionIndexPaths.count)")
         let ids = Set(cv.selectionIndexPaths.compactMap { indexPath -> UUID? in
             guard indexPath.item < screenshots.count else { return nil }
             return screenshots[indexPath.item].id
         })
-        print("[SelectionDebug] Mouse/AppKit selected IDs count = \(ids.count)")
-        print("[SelectionDebug] syncing to SelectionController count = \(ids.count)")
         currentSelectedIDs = ids
         DispatchQueue.main.async { [weak self] in
             self?.onSelectionSnapshot?(ids, reason)
@@ -215,7 +205,6 @@ final class ScreenshotCollectionViewController: NSViewController {
         pendingDragIDs = sourceWasSelected
             ? screenshotIDs.filter { oldSelection.contains($0) }
             : [id]
-        print("[InternalDrag] mouse down item index=\(indexPath.item) uuid=\(id.uuidString) selected=\(sourceWasSelected)")
 
         let normalizedMods = modifiers.intersection(.deviceIndependentFlagsMask)
         let isPlainClick = normalizedMods.isEmpty || normalizedMods == .function
@@ -230,13 +219,6 @@ final class ScreenshotCollectionViewController: NSViewController {
     fileprivate func dispatchDoubleClick(at indexPath: IndexPath) {
         guard indexPath.item < screenshots.count else { return }
         let screenshot = screenshots[indexPath.item]
-        #if DEBUG
-        print("[DoubleClick] item index=\(indexPath.item)")
-        print("[DoubleClick] screenshot uuid=\(screenshot.uuidString)")
-        if let libraryPath = screenshot.libraryPath {
-            print("[DoubleClick] opening path=\(libraryPath)")
-        }
-        #endif
         onItemDoubleClick?(screenshot.id)
     }
 
@@ -256,32 +238,12 @@ final class ScreenshotCollectionViewController: NSViewController {
             applyExternalSelection([clickedID])
             onItemClick?(clickedID, [])
         }
-        #if DEBUG
-        print("[Drag] start index: \(indexPath.item)")
-        print("[Drag] initial selection count: \(initialSelection.count)")
-        print("[Drag] normalized selection count: \(ids.count)")
-        print("[Drag] single item drag: \(ids.count == 1)")
-        #endif
-        #if DEBUG
-        print("[DragSource] started item index=\(indexPath.item) uuid=\(clickedID.uuidString)")
-        print("[DragSource] dragged IDs: \(ids.map(\.uuidString))")
-        print("[DragSource] writing pasteboard type: \(InternalScreenshotDrag.pasteboardTypeString)")
-        #endif
 
         let itemFrameInCollection = item.view.convert(item.view.bounds, to: collectionView)
             .integral
-        #if DEBUG
-        print("[Drag] preview frame: x=\(Int(itemFrameInCollection.origin.x)) y=\(Int(itemFrameInCollection.origin.y)) w=\(Int(itemFrameInCollection.width)) h=\(Int(itemFrameInCollection.height))")
-        #endif
         let fileURLs = managedFileURLs(for: ids)
-        print("[Drag] started with \(fileURLs.urls.count) file(s)")
         let primaryURL = managedFileURL(for: clickedID) ?? fileURLs.urls.first
         let pasteboardItem = dragPasteboardItem(ids: ids, fileURL: primaryURL)
-        #if DEBUG
-        print("[DragSource] primary pasteboard types after writing: \(pasteboardItem.types.map(\.rawValue))")
-        print("[DragSource] external file URL count: \(fileURLs.urls.count)")
-        print("[DragSource] internal ID count: \(ids.count)")
-        #endif
 
         let internalDraggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
         internalDraggingItem.setDraggingFrame(
@@ -295,14 +257,8 @@ final class ScreenshotCollectionViewController: NSViewController {
             draggingItems.append(fileItem)
         }
         if fileURLs.missingCount > 0 {
-            #if DEBUG
-            print("[DragSource] missing managed files for external drag: \(fileURLs.missingCount)")
-            #endif
             onDragMissingFiles?(fileURLs.missingCount)
         }
-        #if DEBUG
-        print("[DragSource] file URLs: \(fileURLs.urls.map(\.path))")
-        #endif
         isInternalDragActive = true
         collectionView.beginDraggingSession(with: draggingItems, event: event, source: collectionView)
     }
@@ -360,9 +316,6 @@ final class ScreenshotCollectionViewController: NSViewController {
                 continue
             }
             let exists = fileManager.fileExists(atPath: url.path)
-            #if DEBUG
-            print("[DragSource] libraryPath exists: \(exists) path=\(url.path)")
-            #endif
             guard exists else {
                 missing += 1
                 print("[MissingFile] file missing url = \(url.path)")
@@ -442,14 +395,12 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
 extension ScreenshotCollectionViewController: NSCollectionViewDelegate {
     func collectionView(_ collectionView: NSCollectionView,
                         didSelectItemsAt indexPaths: Set<IndexPath>) {
-        print("[SelectionDebug] NSCollectionView selectedIndexPaths count = \(collectionView.selectionIndexPaths.count)")
         guard !isApplyingExternalSelection else { return }
         syncSelectionFromCollectionView(reason: "collectionViewDidSelect")
     }
 
     func collectionView(_ collectionView: NSCollectionView,
                         didDeselectItemsAt indexPaths: Set<IndexPath>) {
-        print("[SelectionDebug] NSCollectionView selectedIndexPaths count = \(collectionView.selectionIndexPaths.count)")
         guard !isApplyingExternalSelection else { return }
         syncSelectionFromCollectionView(reason: "collectionViewDidDeselect")
     }
@@ -499,7 +450,6 @@ final class ScreenshotGridCollectionView: NSCollectionView {
         super.viewDidMoveToWindow()
         registerForDraggedTypes([.fileURL])
         window?.makeFirstResponder(self)
-        print("[Grid] viewDidMoveToWindow; window=\(window != nil); firstResponder=\(String(describing: window?.firstResponder))")
     }
 
     override func draggingSession(_ session: NSDraggingSession,
@@ -616,13 +566,11 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     /// responder chain; we route it to the SelectionController instead of
     /// NSCollectionView's built-in selection so SwiftUI stays the source of truth.
     override func selectAll(_ sender: Any?) {
-        print("[Grid] selectAll(_:) fired")
         onSelectAllShortcut?()
     }
 
     /// Standard Escape path.
     override func cancelOperation(_ sender: Any?) {
-        print("[Grid] cancelOperation(_:) fired")
         onClearShortcut?()
     }
 
@@ -640,7 +588,6 @@ final class ScreenshotGridCollectionView: NSCollectionView {
             && !mods.contains(.control)
         if isCommandOnly,
            event.charactersIgnoringModifiers?.lowercased() == "a" {
-            print("[Grid] performKeyEquivalent caught Cmd-A")
             onSelectAllShortcut?()
             return true
         }

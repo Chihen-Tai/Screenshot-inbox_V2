@@ -12,7 +12,6 @@ final class QuickLookPreviewController: NSObject, QLPreviewPanelDataSource, QLPr
     @MainActor
     func open(urls: [URL]) {
         items = Self.previewItems(for: urls)
-        print("[QuickLook] opening \(items.count) item(s)")
         guard !items.isEmpty else { return }
         guard let panel = QLPreviewPanel.shared() else { return }
         panel.dataSource = self
@@ -30,7 +29,6 @@ final class QuickLookPreviewController: NSObject, QLPreviewPanelDataSource, QLPr
         }
         panel.orderOut(nil)
         items.removeAll()
-        print("[QuickLook] closed")
     }
 
     static func previewItems(for urls: [URL], fileManager: FileManager = .default) -> [QuickLookPreviewItem] {
