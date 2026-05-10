@@ -14,6 +14,12 @@ Screenshot Inbox watches for screenshots, keeps them in a visual library, and gi
 
 > **Alpha status:** Screenshot Inbox is usable for hands-on testing, but it is still pre-release software. Keep backups of important screenshots and expect rough edges around packaging, permissions, and some advanced workflows.
 
+## Quick Demo
+
+<video src="README-assets/demo.mp4" controls width="900" poster="README-assets/demo-poster.png"></video>
+
+[Open the demo video directly](README-assets/demo.mp4) if the embedded player does not render in your GitHub client.
+
 ## Install With Git Clone (Recommended)
 
 The recommended way to try Screenshot Inbox during alpha is to build and run it from source:
