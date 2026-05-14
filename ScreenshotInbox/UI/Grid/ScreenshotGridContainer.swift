@@ -70,6 +70,9 @@ struct ScreenshotGridContainer: View {
                         : "\(missingCount) files could not be dragged because they were missing",
                         kind: .info
                     )
+                },
+                onFavoriteToggle: { id, isFavorite in
+                    appState.setFavorite(ids: [id], isFavorite: isFavorite)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

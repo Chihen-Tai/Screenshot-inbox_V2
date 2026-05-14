@@ -28,6 +28,7 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
     let onEmptyAreaMenu: () -> NSMenu?
     let onFileDrop: ([URL], Int) -> Void
     let onDragMissingFiles: (Int) -> Void
+    let onFavoriteToggle: (UUID, Bool) -> Void
 
     func makeNSViewController(context: Context) -> ScreenshotCollectionViewController {
         let vc = ScreenshotCollectionViewController()
@@ -56,5 +57,6 @@ struct ScreenshotCollectionViewRepresentable: NSViewControllerRepresentable {
         vc.onEmptyAreaMenu = onEmptyAreaMenu
         vc.onFileDrop = onFileDrop
         vc.onDragMissingFiles = onDragMissingFiles
+        vc.onFavoriteToggle = onFavoriteToggle
     }
 }

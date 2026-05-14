@@ -19,9 +19,13 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     private let dateField = NSTextField(labelWithString: "")
     private let checkmarkView = NSImageView()
     private let thumbnailImageView = NSImageView()
+    private let starButton = NSButton()
     private var thumbnailHost: NSHostingView<MockThumbnailView>!
     private var trackingArea: NSTrackingArea?
     private var isHovering = false
+
+    private var itemID: UUID?
+    private var currentIsFavorite = false
 
     // Mutable constraints driven by the active LayoutMode. The aspect-ratio
     // constraint uses an immutable `multiplier`, so swapping modes means
@@ -50,6 +54,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     var onClick: ((NSEvent.ModifierFlags) -> Void)?
     var onDoubleClick: (() -> Void)?
     var onDrag: ((NSEvent) -> Void)?
+    var onFavoriteToggle: ((UUID, Bool) -> Void)?
 
     override func loadView() {
         let root = NSView()
@@ -94,6 +99,15 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
 
         configureCheckmark()
         backgroundView.addSubview(checkmarkView)
+
+        starButton.translatesAutoresizingMaskIntoConstraints = false
+        starButton.isBordered = false
+        starButton.imageScaling = .scaleNone
+        starButton.wantsLayer = true
+        starButton.target = self
+        starButton.action = #selector(starButtonClicked)
+        updateStarButton(isFavorite: false)
+        backgroundView.addSubview(starButton)
 
         let p = currentParams
 
@@ -156,9 +170,14 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
             dateBottomConstraint,
 
             checkmarkView.topAnchor.constraint(equalTo: thumbnailContainer.topAnchor, constant: 6),
-            checkmarkView.trailingAnchor.constraint(equalTo: thumbnailContainer.trailingAnchor, constant: -6),
+            checkmarkView.leadingAnchor.constraint(equalTo: thumbnailContainer.leadingAnchor, constant: 6),
             checkmarkWidthConstraint,
             checkmarkHeightConstraint,
+
+            starButton.topAnchor.constraint(equalTo: thumbnailContainer.topAnchor, constant: 4),
+            starButton.trailingAnchor.constraint(equalTo: thumbnailContainer.trailingAnchor, constant: -4),
+            starButton.widthAnchor.constraint(equalToConstant: 26),
+            starButton.heightAnchor.constraint(equalToConstant: 26),
         ])
 
         applyAppearance()
@@ -243,6 +262,9 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     }
 
     func configure(with screenshot: Screenshot, thumbnailProvider: MacThumbnailProvider?) {
+        itemID = screenshot.id
+        currentIsFavorite = screenshot.isFavorite
+        updateStarButton(isFavorite: screenshot.isFavorite)
         if let image = thumbnailProvider?.loadThumbnail(for: screenshot, tier: .small) {
             thumbnailImageView.image = image
             thumbnailImageView.isHidden = false
@@ -285,6 +307,10 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         onClick = nil
         onDoubleClick = nil
         onDrag = nil
+        onFavoriteToggle = nil
+        itemID = nil
+        currentIsFavorite = false
+        updateStarButton(isFavorite: false)
         thumbnailImageView.image = nil
         thumbnailImageView.isHidden = true
         thumbnailHost.isHidden = false
@@ -304,6 +330,25 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
 
     override func mouseDragged(with event: NSEvent) {
         onDrag?(event)
+    }
+
+    private func updateStarButton(isFavorite: Bool) {
+        let symbolName = isFavorite ? "star.fill" : "star"
+        let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        starButton.image = NSImage(systemSymbolName: symbolName,
+                                   accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg)
+        starButton.contentTintColor = isFavorite
+            ? .systemYellow
+            : NSColor.white.withAlphaComponent(0.80)
+    }
+
+    @objc private func starButtonClicked() {
+        guard let id = itemID else { return }
+        let newValue = !currentIsFavorite
+        currentIsFavorite = newValue
+        updateStarButton(isFavorite: newValue)
+        onFavoriteToggle?(id, newValue)
     }
 
     private func applyAppearance() {

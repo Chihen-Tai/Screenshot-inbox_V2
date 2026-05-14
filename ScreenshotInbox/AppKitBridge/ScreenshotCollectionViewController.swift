@@ -17,6 +17,10 @@ final class ScreenshotCollectionViewController: NSViewController {
     private var isApplyingExternalSelection = false
     private var pendingDragIDs: [UUID] = []
     private var isInternalDragActive = false
+    private var isRubberBandActive = false
+    // Snapshot of selection captured BEFORE super.mouseDown fires, which can
+    // collapse multi-selection via didDeselectItemsAt → syncSelectionFromCollectionView.
+    private var selectionAtMouseDown: Set<UUID> = []
 
     /// Click callback. The container resolves modifier flags to the right
     /// SelectionController call (replace / toggle / extendRange).
@@ -41,6 +45,7 @@ final class ScreenshotCollectionViewController: NSViewController {
     /// Phase 6.5 — Finder/Desktop files dropped into the grid.
     var onFileDrop: (([URL], Int) -> Void)?
     var onDragMissingFiles: ((Int) -> Void)?
+    var onFavoriteToggle: ((UUID, Bool) -> Void)?
     var thumbnailProvider: MacThumbnailProvider?
 
     private let layout = ScreenshotCollectionViewLayout()
@@ -104,6 +109,32 @@ final class ScreenshotCollectionViewController: NSViewController {
         cv.onInternalDragEnded = { [weak self] in
             self?.endInternalDrag()
         }
+        cv.onWillProcessItemClick = { [weak self] in
+            guard let self else { return }
+            self.selectionAtMouseDown = self.currentSelectedIDs
+        }
+        cv.onRubberBandUpdate = { [weak self] paths in
+            guard let self else { return }
+            self.isRubberBandActive = true
+            self.currentSelectedIDs = Set(paths.compactMap { path -> UUID? in
+                guard path.item < self.screenshots.count else { return nil }
+                return self.screenshots[path.item].id
+            })
+        }
+        cv.onRubberBandEnd = { [weak self] paths in
+            guard let self else { return }
+            self.isRubberBandActive = false
+            let ids = Set(paths.compactMap { path -> UUID? in
+                guard path.item < self.screenshots.count else { return nil }
+                return self.screenshots[path.item].id
+            })
+            // Do NOT set currentSelectedIDs here. Leaving it at its pre-drag value
+            // lets applyDataIfNeeded detect the mismatch and call applyExternalSelection,
+            // which is what actually clears the visual selection when no drag occurred.
+            DispatchQueue.main.async { [weak self] in
+                self?.onSelectionSnapshot?(ids, "rubberBandEnd")
+            }
+        }
         cv.register(
             ScreenshotCollectionViewItem.self,
             forItemWithIdentifier: ScreenshotCollectionViewItem.identifier
@@ -164,8 +195,10 @@ final class ScreenshotCollectionViewController: NSViewController {
             }
         }
         if needsReload || selectedIDs != currentSelectedIDs {
-            currentSelectedIDs = selectedIDs
-            applyExternalSelection(selectedIDs)
+            if !isRubberBandActive {
+                currentSelectedIDs = selectedIDs
+                applyExternalSelection(selectedIDs)
+            }
         }
     }
 
@@ -174,6 +207,7 @@ final class ScreenshotCollectionViewController: NSViewController {
         isApplyingExternalSelection = true
         defer { isApplyingExternalSelection = false }
         cv.deselectAll(nil)
+        for item in cv.visibleItems() where item.isSelected { item.isSelected = false }
         guard !ids.isEmpty else { return }
         var paths: Set<IndexPath> = []
         for (i, id) in screenshotIDs.enumerated() where ids.contains(id) {
@@ -200,7 +234,11 @@ final class ScreenshotCollectionViewController: NSViewController {
         // the click — manually take focus so the next Cmd-A / Escape lands here.
         collectionView.window?.makeFirstResponder(collectionView)
         let id = screenshots[indexPath.item].id
-        let oldSelection = currentSelectedIDs
+        // Use the snapshot taken before super.mouseDown — NSCollectionView's default
+        // mouseDown can fire didDeselectItemsAt which synchronously collapses
+        // currentSelectedIDs to just the clicked item before we get here.
+        let oldSelection = selectionAtMouseDown.isEmpty ? currentSelectedIDs : selectionAtMouseDown
+        selectionAtMouseDown = []
         let sourceWasSelected = oldSelection.contains(id)
         pendingDragIDs = sourceWasSelected
             ? screenshotIDs.filter { oldSelection.contains($0) }
@@ -227,12 +265,19 @@ final class ScreenshotCollectionViewController: NSViewController {
         guard let indexPath = collectionView.indexPath(for: item),
               indexPath.item < screenshots.count else { return }
         let clickedID = screenshots[indexPath.item].id
-        let initialSelection = currentSelectedIDs
-        let sourceWasSelected = initialSelection.contains(clickedID)
-        let ids = sourceWasSelected
-            ? screenshotIDs.filter { initialSelection.contains($0) }
-            : [clickedID]
+        // pendingDragIDs was captured in dispatchClick using the selection snapshot
+        // taken BEFORE super.mouseDown could collapse multi-selection.
+        let ids: [UUID]
+        if !pendingDragIDs.isEmpty {
+            ids = pendingDragIDs
+        } else {
+            let sel = currentSelectedIDs
+            ids = sel.contains(clickedID)
+                ? screenshotIDs.filter { sel.contains($0) }
+                : [clickedID]
+        }
         guard !ids.isEmpty else { return }
+        let sourceWasSelected = ids.contains(clickedID)
         if !sourceWasSelected {
             currentSelectedIDs = [clickedID]
             applyExternalSelection([clickedID])
@@ -386,6 +431,9 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
             guard let self, let item else { return }
             self.beginInternalDrag(from: item, event: event)
         }
+        item.onFavoriteToggle = { [weak self] id, isFavorite in
+            self?.onFavoriteToggle?(id, isFavorite)
+        }
         return item
     }
 }
@@ -429,10 +477,36 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     /// in this view's coordinate space and returns the menu to display, or
     /// `nil` to suppress the menu entirely.
     var onMenuForLocation: ((NSPoint) -> NSMenu?)?
+    /// Live rubber-band: called on every mouseDragged with the current set of
+    /// intersecting index paths. The controller updates `currentSelectedIDs`
+    /// without committing to AppState so the async loop doesn't fight back.
+    var onRubberBandUpdate: ((Set<IndexPath>) -> Void)?
+    /// Rubber-band finished (mouseUp). Controller commits final selection to
+    /// AppState via `onSelectionSnapshot`.
+    var onRubberBandEnd: ((Set<IndexPath>) -> Void)?
+    /// Fired when a mouseDown lands on an item, BEFORE super.mouseDown is called.
+    /// The controller uses this to snapshot the selection before NSCollectionView
+    /// can collapse multi-selection via its default mouseDown handling.
+    var onWillProcessItemClick: (() -> Void)?
 
     private let dropOverlayView = NSView()
     private let dropOverlayLabel = NSTextField(labelWithString: "Drop screenshots to import")
     private var isDropHighlightVisible = false
+
+    // MARK: Rubber-band state
+    private var rubberBandActive = false
+    private var rubberBandAnchor = CGPoint.zero
+    private var rubberBandLivePaths: Set<IndexPath> = []
+    private lazy var rubberBandOverlay: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.selectedContentBackgroundColor
+            .withAlphaComponent(0.12).cgColor
+        v.layer?.borderColor = NSColor.selectedContentBackgroundColor
+            .withAlphaComponent(0.40).cgColor
+        v.layer?.borderWidth = 1.0
+        return v
+    }()
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -543,13 +617,61 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        // Reclaim focus on every click — sidebar / inspector may have stolen it.
         window?.makeFirstResponder(self)
         let local = convert(event.locationInWindow, from: nil)
-        if indexPathForItem(at: local) == nil {
-            onBackgroundClick?()
+        guard indexPathForItem(at: local) == nil else {
+            // Snapshot selection BEFORE super.mouseDown so the controller can
+            // use it in dispatchClick — NSCollectionView's default mouseDown
+            // may fire didDeselectItemsAt, collapsing currentSelectedIDs first.
+            onWillProcessItemClick?()
+            super.mouseDown(with: event)
+            return
         }
-        super.mouseDown(with: event)
+        // Background click: clear selection then own the rubber-band tracking.
+        onBackgroundClick?()
+        rubberBandActive = true
+        rubberBandAnchor = local
+        rubberBandLivePaths = []
+        addSubview(rubberBandOverlay)
+        rubberBandOverlay.frame = .zero
+        // Do NOT call super — we replace NSCollectionView's built-in rubber-band
+        // so we can update isSelected on cells live during mouseDragged.
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard rubberBandActive else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let local = convert(event.locationInWindow, from: nil)
+        let rect = CGRect(
+            x: min(rubberBandAnchor.x, local.x),
+            y: min(rubberBandAnchor.y, local.y),
+            width:  abs(local.x - rubberBandAnchor.x),
+            height: abs(local.y - rubberBandAnchor.y))
+        rubberBandOverlay.frame = rect
+
+        let newPaths = Set(indexPathsForVisibleItems().filter { path in
+            guard let itm = item(at: path) else { return false }
+            return itm.view.frame.intersects(rect)
+        })
+        // Apply live selection changes directly on cells — bypasses the async
+        // AppState loop so the visual state updates before mouseUp.
+        for path in rubberBandLivePaths.subtracting(newPaths) { item(at: path)?.isSelected = false }
+        for path in newPaths.subtracting(rubberBandLivePaths) { item(at: path)?.isSelected = true  }
+        rubberBandLivePaths = newPaths
+        onRubberBandUpdate?(newPaths)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard rubberBandActive else {
+            super.mouseUp(with: event)
+            return
+        }
+        rubberBandActive = false
+        rubberBandOverlay.removeFromSuperview()
+        onRubberBandEnd?(rubberBandLivePaths)
+        rubberBandLivePaths = []
     }
 
     /// Phase 5 — right-click. Take focus, hit-test the location to figure out
