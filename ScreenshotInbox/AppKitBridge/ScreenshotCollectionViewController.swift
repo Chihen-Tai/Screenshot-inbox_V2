@@ -17,6 +17,7 @@ final class ScreenshotCollectionViewController: NSViewController {
     private var isApplyingExternalSelection = false
     private var pendingDragIDs: [UUID] = []
     private var isInternalDragActive = false
+    private var isDragSessionStarting = false
     private var isRubberBandActive = false
     // Snapshot of selection captured BEFORE super.mouseDown fires, which can
     // collapse multi-selection via didDeselectItemsAt → syncSelectionFromCollectionView.
@@ -112,6 +113,13 @@ final class ScreenshotCollectionViewController: NSViewController {
         cv.onWillProcessItemClick = { [weak self] in
             guard let self else { return }
             self.selectionAtMouseDown = self.currentSelectedIDs
+        }
+        // Fires from ScreenshotGridCollectionView.mouseDragged when the drag
+        // began on an item. This path catches multi-selection drags where
+        // NSCollectionView's tracking loop intercepts mouseDragged and prevents
+        // ScreenshotCollectionViewItem.mouseDragged from firing.
+        cv.onItemDrag = { [weak self] item, event in
+            self?.beginInternalDrag(from: item, event: event)
         }
         cv.onRubberBandUpdate = { [weak self] paths in
             guard let self else { return }
@@ -261,24 +269,36 @@ final class ScreenshotCollectionViewController: NSViewController {
     }
 
     fileprivate func beginInternalDrag(from item: ScreenshotCollectionViewItem, event: NSEvent) {
-        guard !isInternalDragActive else { return }
+        print("[DragStable] beginInternalDrag called")
+        print("[DragStable] isInternalDragActive before =", isInternalDragActive)
+        guard !isDragSessionStarting && !isInternalDragActive else {
+            print("[DragStable] skip: drag session already active")
+            return
+        }
         guard let indexPath = collectionView.indexPath(for: item),
               indexPath.item < screenshots.count else { return }
         let clickedID = screenshots[indexPath.item].id
-        // pendingDragIDs was captured in dispatchClick using the selection snapshot
-        // taken BEFORE super.mouseDown could collapse multi-selection.
-        let ids: [UUID]
-        if !pendingDragIDs.isEmpty {
-            ids = pendingDragIDs
+
+        // pendingDragIDs is set in dispatchClick on mouseDown. Only trust it when
+        // it actually contains the clicked item — it may be stale from a prior
+        // Cmd+click that set it to a different single ID.
+        let dragIDs: [UUID]
+        if !pendingDragIDs.isEmpty && pendingDragIDs.contains(clickedID) {
+            dragIDs = pendingDragIDs
+        } else if currentSelectedIDs.contains(clickedID) {
+            dragIDs = screenshotIDs.filter { currentSelectedIDs.contains($0) }
         } else {
-            let sel = currentSelectedIDs
-            ids = sel.contains(clickedID)
-                ? screenshotIDs.filter { sel.contains($0) }
-                : [clickedID]
+            dragIDs = [clickedID]
         }
-        guard !ids.isEmpty else { return }
-        let sourceWasSelected = ids.contains(clickedID)
-        if !sourceWasSelected {
+        print("[DragStable] ids.count =", dragIDs.count)
+        print("[DragTrace] clickedID =", clickedID)
+        print("[DragTrace] currentSelectedIDs.count =", currentSelectedIDs.count)
+        print("[DragTrace] pendingDragIDs.count =", pendingDragIDs.count)
+        print("[DragTrace] resolved ids.count =", dragIDs.count)
+        guard !dragIDs.isEmpty else { return }
+
+        // If the drag originated from an unselected item, select it first.
+        if !currentSelectedIDs.contains(clickedID) {
             currentSelectedIDs = [clickedID]
             applyExternalSelection([clickedID])
             onItemClick?(clickedID, [])
@@ -286,29 +306,54 @@ final class ScreenshotCollectionViewController: NSViewController {
 
         let itemFrameInCollection = item.view.convert(item.view.bounds, to: collectionView)
             .integral
-        let fileURLs = managedFileURLs(for: ids)
-        let primaryURL = managedFileURL(for: clickedID) ?? fileURLs.urls.first
-        let pasteboardItem = dragPasteboardItem(ids: ids, fileURL: primaryURL)
+        print("[DragTrace] after itemFrame")
+        print("[DragTrace] before managedFileURLs")
+        let fileURLs = managedFileURLs(for: dragIDs)
+        print("[DragTrace] fileURLs.urls.count =", fileURLs.urls.count)
+        print("[DragTrace] fileURLs.missingCount =", fileURLs.missingCount)
+        print("[DragTrace] fileURLs =", fileURLs.urls.map { $0.path })
 
-        let internalDraggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
-        internalDraggingItem.setDraggingFrame(
-            itemFrameInCollection,
-            contents: dragImage(for: item, count: ids.count)
-        )
-        var draggingItems = [internalDraggingItem]
-        for url in fileURLs.urls where url != primaryURL {
-            let fileItem = NSDraggingItem(pasteboardWriter: dragPasteboardItem(ids: ids, fileURL: url))
-            fileItem.setDraggingFrame(NSRect(origin: itemFrameInCollection.origin, size: .zero), contents: nil)
-            draggingItems.append(fileItem)
-        }
         if fileURLs.missingCount > 0 {
             onDragMissingFiles?(fileURLs.missingCount)
         }
+
+        guard !fileURLs.urls.isEmpty else {
+            print("[DragTrace] abort: no existing file URLs for drag ids")
+            return
+        }
+
+        let dragPreview = dragImage(for: item, count: fileURLs.urls.count)
+
+        let draggingItems: [NSDraggingItem] = fileURLs.urls.enumerated().map { index, url in
+            let draggingItem = NSDraggingItem(pasteboardWriter: url as NSURL)
+            if index == 0 {
+                draggingItem.setDraggingFrame(itemFrameInCollection, contents: dragPreview)
+            } else {
+                draggingItem.setDraggingFrame(
+                    NSRect(
+                        x: itemFrameInCollection.origin.x + CGFloat(index) * 3,
+                        y: itemFrameInCollection.origin.y - CGFloat(index) * 3,
+                        width: itemFrameInCollection.width,
+                        height: itemFrameInCollection.height
+                    ),
+                    contents: nil
+                )
+            }
+            return draggingItem
+        }
+
+        print("[DragStable] draggingItems.count =", draggingItems.count)
+        print("[DragTrace] draggingItems.count =", draggingItems.count)
+        print("[DragTrace] will call beginDraggingSession")
+        isDragSessionStarting = true
         isInternalDragActive = true
         collectionView.beginDraggingSession(with: draggingItems, event: event, source: collectionView)
+        print("[DragStable] beginDraggingSession returned")
+        print("[DragTrace] beginDraggingSession returned")
     }
 
     fileprivate func endInternalDrag() {
+        isDragSessionStarting = false
         isInternalDragActive = false
         pendingDragIDs.removeAll()
     }
@@ -429,6 +474,7 @@ extension ScreenshotCollectionViewController: NSCollectionViewDataSource {
         }
         item.onDrag = { [weak self, weak item] event in
             guard let self, let item else { return }
+            print("[DragTrace] item.onDrag closure fired")
             self.beginInternalDrag(from: item, event: event)
         }
         item.onFavoriteToggle = { [weak self] id, isFavorite in
@@ -451,6 +497,30 @@ extension ScreenshotCollectionViewController: NSCollectionViewDelegate {
                         didDeselectItemsAt indexPaths: Set<IndexPath>) {
         guard !isApplyingExternalSelection else { return }
         syncSelectionFromCollectionView(reason: "collectionViewDidDeselect")
+    }
+
+    func collectionView(_ collectionView: NSCollectionView,
+                        validateDrop draggingInfo: NSDraggingInfo,
+                        proposedIndexPath proposedDropIndexPath: AutoreleasingUnsafeMutablePointer<NSIndexPath>,
+                        dropOperation proposedDropOperation: UnsafeMutablePointer<NSCollectionView.DropOperation>) -> NSDragOperation {
+        let isSelfDrag = (draggingInfo.draggingSource as AnyObject?) === collectionView
+        print("[DragStable] validateDrop isSelfDrag =", isSelfDrag)
+        print("[DragStable] validateDrop proposedIndexPath =", proposedDropIndexPath.pointee)
+        print("[DragStable] validateDrop operation =", proposedDropOperation.pointee.rawValue)
+        print("[DragStable] draggingPasteboard types =", draggingInfo.draggingPasteboard.types ?? [])
+        // Reject all item-level drops. External file import uses the collection-view-wide
+        // draggingEntered/performDragOperation path on ScreenshotGridCollectionView.
+        // Internal (self) drags must also be rejected here to prevent NSCollectionView
+        // from proposing a reorder indicator and issuing a conflicting .move operation.
+        return []
+    }
+
+    func collectionView(_ collectionView: NSCollectionView,
+                        acceptDrop draggingInfo: NSDraggingInfo,
+                        indexPath: IndexPath,
+                        dropOperation: NSCollectionView.DropOperation) -> Bool {
+        print("[DragStable] acceptDrop called")
+        return false
     }
 }
 
@@ -488,6 +558,16 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     /// The controller uses this to snapshot the selection before NSCollectionView
     /// can collapse multi-selection via its default mouseDown handling.
     var onWillProcessItemClick: (() -> Void)?
+    /// Fires from mouseDragged when the drag originated on an item (not background
+    /// rubber-band). Used by the controller to initiate multi-file drag from the
+    /// collection-view level, bypassing NSCollectionView's tracking loop that
+    /// intercepts drag events for multi-selection and prevents item.mouseDragged.
+    var onItemDrag: ((ScreenshotCollectionViewItem, NSEvent) -> Void)?
+
+    // The item whose view received the last mouseDown. Set in mouseDown, cleared
+    // in mouseUp, used in mouseDragged to route drags without relying on the item's
+    // own mouseDragged (which NSCollectionView may swallow for multi-selection).
+    private var lastMouseDownItem: ScreenshotCollectionViewItem?
 
     private let dropOverlayView = NSView()
     private let dropOverlayLabel = NSTextField(labelWithString: "Drop screenshots to import")
@@ -528,12 +608,15 @@ final class ScreenshotGridCollectionView: NSCollectionView {
 
     override func draggingSession(_ session: NSDraggingSession,
                                   sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? .copy : [.copy, .move]
+        let mask: NSDragOperation = context == .outsideApplication ? .copy : .copy
+        print("[DragStable] sourceOperationMask context=\(context.rawValue) mask=\(mask.rawValue)")
+        return mask
     }
 
     override func draggingSession(_ session: NSDraggingSession,
                                   endedAt screenPoint: NSPoint,
                                   operation: NSDragOperation) {
+        print("[DragStable] draggingSession ended operation =", operation.rawValue)
         onInternalDragEnded?()
     }
 
@@ -578,6 +661,13 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     }
 
     private func acceptedDrop(from sender: NSDraggingInfo) -> DragDropController.FileDrop {
+        // Drags that originated from this collection view must never be treated as
+        // external file imports. beginDraggingSession passes source: collectionView
+        // (self), so identity comparison is the reliable gate regardless of what
+        // pasteboard types are present.
+        if (sender.draggingSource as AnyObject?) === self {
+            return DragDropController.FileDrop(supported: [], unsupportedCount: 0)
+        }
         if sender.draggingPasteboard.availableType(from: [InternalScreenshotDrag.pasteboardType]) != nil {
             return DragDropController.FileDrop(supported: [], unsupportedCount: 0)
         }
@@ -624,9 +714,14 @@ final class ScreenshotGridCollectionView: NSCollectionView {
             // use it in dispatchClick — NSCollectionView's default mouseDown
             // may fire didDeselectItemsAt, collapsing currentSelectedIDs first.
             onWillProcessItemClick?()
+            // Store the item so mouseDragged can initiate drag without relying on
+            // item.mouseDragged, which NSCollectionView swallows for multi-selection.
+            lastMouseDownItem = indexPathForItem(at: local)
+                .flatMap { item(at: $0) as? ScreenshotCollectionViewItem }
             super.mouseDown(with: event)
             return
         }
+        lastMouseDownItem = nil
         // Background click: clear selection then own the rubber-band tracking.
         onBackgroundClick?()
         rubberBandActive = true
@@ -640,7 +735,13 @@ final class ScreenshotGridCollectionView: NSCollectionView {
 
     override func mouseDragged(with event: NSEvent) {
         guard rubberBandActive else {
-            super.mouseDragged(with: event)
+            if let trackedItem = lastMouseDownItem {
+                // Bypass super.mouseDragged (NSCollectionView's drag machinery) which
+                // intercepts drag events for multi-selection without starting a drag.
+                onItemDrag?(trackedItem, event)
+            } else {
+                super.mouseDragged(with: event)
+            }
             return
         }
         let local = convert(event.locationInWindow, from: nil)
@@ -664,6 +765,7 @@ final class ScreenshotGridCollectionView: NSCollectionView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        lastMouseDownItem = nil
         guard rubberBandActive else {
             super.mouseUp(with: event)
             return

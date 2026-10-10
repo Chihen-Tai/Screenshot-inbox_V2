@@ -329,6 +329,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        print("[DragTrace] cell mouseDragged fired")
         onDrag?(event)
     }
 
